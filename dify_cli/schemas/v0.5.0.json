@@ -1,0 +1,428 @@
+{
+  "dsl_version": "0.5.0",
+  "_note": "Minimal hand-authored bundle. The canonical schema is produced by cli/scripts/extract_schemas.py against a working dify-api environment; this fallback covers common node types with loose validation (additionalProperties: true) so the CLI is functional. Re-generate with the extract script in CI to get exhaustive field-level schemas.",
+  "top_schema": {
+    "type": "object",
+    "required": ["version", "kind", "app"],
+    "properties": {
+      "version": {"type": "string"},
+      "kind": {"type": "string"},
+      "app": {
+        "type": "object",
+        "required": ["name", "mode"],
+        "properties": {
+          "name": {"type": "string"},
+          "mode": {"type": "string"},
+          "icon": {"type": "string"},
+          "icon_background": {"type": "string"},
+          "description": {"type": "string"},
+          "use_icon_as_answer_icon": {"type": "boolean"}
+        },
+        "additionalProperties": true
+      },
+      "workflow": {
+        "type": "object",
+        "properties": {
+          "graph": {
+            "type": "object",
+            "properties": {
+              "nodes": {"type": "array"},
+              "edges": {"type": "array"},
+              "viewport": {"type": "object"}
+            },
+            "additionalProperties": true
+          },
+          "environment_variables": {"type": "array"},
+          "conversation_variables": {"type": "array"},
+          "features": {"type": "object"}
+        },
+        "additionalProperties": true
+      },
+      "model_config": {"type": "object"},
+      "dependencies": {"type": "array"}
+    },
+    "additionalProperties": true
+  },
+  "node_types": {
+    "start": {
+      "type": "object",
+      "required": ["type", "title"],
+      "properties": {
+        "type": {"const": "start"},
+        "title": {"type": "string"},
+        "variables": {"type": "array"},
+        "desc": {"type": ["string", "null"]},
+        "version": {"type": "string"}
+      },
+      "additionalProperties": true
+    },
+    "end": {
+      "type": "object",
+      "required": ["type", "title", "outputs"],
+      "properties": {
+        "type": {"const": "end"},
+        "title": {"type": "string"},
+        "outputs": {"type": "array"},
+        "desc": {"type": ["string", "null"]},
+        "version": {"type": "string"}
+      },
+      "additionalProperties": true
+    },
+    "answer": {
+      "type": "object",
+      "required": ["type", "title"],
+      "properties": {
+        "type": {"const": "answer"},
+        "title": {"type": "string"},
+        "answer": {"type": "string"},
+        "variables": {"type": "array"},
+        "version": {"type": "string"}
+      },
+      "additionalProperties": true
+    },
+    "llm": {
+      "type": "object",
+      "required": ["type", "title", "model", "prompt_template", "context"],
+      "properties": {
+        "type": {"const": "llm"},
+        "title": {"type": "string"},
+        "model": {
+          "type": "object",
+          "required": ["provider", "name", "mode"],
+          "properties": {
+            "provider": {"type": "string"},
+            "name": {"type": "string"},
+            "mode": {"type": "string", "enum": ["chat", "completion"]},
+            "completion_params": {"type": "object"}
+          },
+          "additionalProperties": true
+        },
+        "prompt_template": {},
+        "prompt_config": {"type": "object"},
+        "memory": {"type": ["object", "null"]},
+        "context": {
+          "type": "object",
+          "required": ["enabled"],
+          "properties": {
+            "enabled": {"type": "boolean"},
+            "variable_selector": {"type": ["array", "null"]}
+          },
+          "additionalProperties": true
+        },
+        "vision": {"type": "object"},
+        "structured_output": {"type": ["object", "null"]},
+        "structured_output_enabled": {"type": "boolean"},
+        "reasoning_format": {"type": "string", "enum": ["separated", "tagged"]},
+        "version": {"type": "string"}
+      },
+      "additionalProperties": true
+    },
+    "knowledge-retrieval": {
+      "type": "object",
+      "required": ["type", "title"],
+      "properties": {
+        "type": {"const": "knowledge-retrieval"},
+        "title": {"type": "string"},
+        "dataset_ids": {"type": "array"},
+        "retrieval_mode": {"type": "string"},
+        "multiple_retrieval_config": {"type": "object"},
+        "single_retrieval_config": {"type": "object"},
+        "version": {"type": "string"}
+      },
+      "additionalProperties": true
+    },
+    "if-else": {
+      "type": "object",
+      "required": ["type", "title"],
+      "properties": {
+        "type": {"const": "if-else"},
+        "title": {"type": "string"},
+        "logical_operator": {"type": "string", "enum": ["and", "or"]},
+        "conditions": {"type": "array"},
+        "cases": {"type": "array"},
+        "version": {"type": "string"}
+      },
+      "additionalProperties": true
+    },
+    "code": {
+      "type": "object",
+      "required": ["type", "title"],
+      "properties": {
+        "type": {"const": "code"},
+        "title": {"type": "string"},
+        "variables": {"type": "array"},
+        "code_language": {"type": "string"},
+        "code": {"type": "string"},
+        "outputs": {"type": "object"},
+        "version": {"type": "string"}
+      },
+      "additionalProperties": true
+    },
+    "template-transform": {
+      "type": "object",
+      "required": ["type", "title"],
+      "properties": {
+        "type": {"const": "template-transform"},
+        "title": {"type": "string"},
+        "template": {"type": "string"},
+        "variables": {"type": "array"},
+        "version": {"type": "string"}
+      },
+      "additionalProperties": true
+    },
+    "question-classifier": {
+      "type": "object",
+      "required": ["type", "title"],
+      "properties": {
+        "type": {"const": "question-classifier"},
+        "title": {"type": "string"},
+        "model": {"type": "object"},
+        "query_variable_selector": {"type": "array"},
+        "classes": {"type": "array"},
+        "instruction": {"type": "string"},
+        "version": {"type": "string"}
+      },
+      "additionalProperties": true
+    },
+    "http-request": {
+      "type": "object",
+      "required": ["type", "title", "method", "url", "authorization", "headers", "params"],
+      "properties": {
+        "type": {"const": "http-request"},
+        "title": {"type": "string"},
+        "method": {"type": "string", "enum": ["get", "post", "put", "patch", "delete", "head", "options"]},
+        "url": {"type": "string"},
+        "authorization": {
+          "type": "object",
+          "required": ["type"],
+          "properties": {
+            "type": {"type": "string", "enum": ["no-auth", "api-key"]},
+            "config": {"type": ["object", "null"]}
+          },
+          "additionalProperties": true
+        },
+        "headers": {"type": "string"},
+        "params": {"type": "string"},
+        "body": {"type": ["object", "null"]},
+        "timeout": {"type": ["object", "null"]},
+        "ssl_verify": {"type": ["boolean", "null"]},
+        "version": {"type": "string"}
+      },
+      "additionalProperties": true
+    },
+    "tool": {
+      "type": "object",
+      "required": ["type", "title"],
+      "properties": {
+        "type": {"const": "tool"},
+        "title": {"type": "string"},
+        "provider_id": {"type": "string"},
+        "provider_type": {"type": "string"},
+        "tool_name": {"type": "string"},
+        "tool_label": {"type": "string"},
+        "tool_parameters": {"type": "object"},
+        "version": {"type": "string"}
+      },
+      "additionalProperties": true
+    },
+    "variable-aggregator": {
+      "type": "object",
+      "required": ["type", "title"],
+      "properties": {
+        "type": {"const": "variable-aggregator"},
+        "title": {"type": "string"},
+        "variables": {"type": "array"},
+        "output_type": {"type": "string"},
+        "version": {"type": "string"}
+      },
+      "additionalProperties": true
+    },
+    "variable-assigner": {
+      "type": "object",
+      "required": ["type", "title"],
+      "properties": {
+        "type": {"const": "variable-assigner"},
+        "title": {"type": "string"},
+        "variables": {"type": "array"},
+        "version": {"type": "string"}
+      },
+      "additionalProperties": true
+    },
+    "assigner": {
+      "type": "object",
+      "required": ["type", "title"],
+      "properties": {
+        "type": {"const": "assigner"},
+        "title": {"type": "string"},
+        "items": {"type": "array"},
+        "version": {"type": "string"}
+      },
+      "additionalProperties": true
+    },
+    "parameter-extractor": {
+      "type": "object",
+      "required": ["type", "title"],
+      "properties": {
+        "type": {"const": "parameter-extractor"},
+        "title": {"type": "string"},
+        "model": {"type": "object"},
+        "parameters": {"type": "array"},
+        "query": {"type": "string"},
+        "version": {"type": "string"}
+      },
+      "additionalProperties": true
+    },
+    "iteration": {
+      "type": "object",
+      "required": ["type", "title"],
+      "properties": {
+        "type": {"const": "iteration"},
+        "title": {"type": "string"},
+        "iterator_selector": {"type": "array"},
+        "output_selector": {"type": "array"},
+        "start_node_id": {"type": ["string", "null"]},
+        "version": {"type": "string"}
+      },
+      "additionalProperties": true
+    },
+    "iteration-start": {
+      "type": "object",
+      "required": ["type", "title"],
+      "properties": {
+        "type": {"const": "iteration-start"},
+        "title": {"type": "string"},
+        "version": {"type": "string"}
+      },
+      "additionalProperties": true
+    },
+    "loop": {
+      "type": "object",
+      "required": ["type", "title"],
+      "properties": {
+        "type": {"const": "loop"},
+        "title": {"type": "string"},
+        "loop_start_node_id": {"type": "string"},
+        "break_condition": {"type": "string"},
+        "version": {"type": "string"}
+      },
+      "additionalProperties": true
+    },
+    "loop-start": {
+      "type": "object",
+      "required": ["type", "title"],
+      "properties": {
+        "type": {"const": "loop-start"},
+        "title": {"type": "string"}
+      },
+      "additionalProperties": true
+    },
+    "loop-end": {
+      "type": "object",
+      "required": ["type", "title"],
+      "properties": {
+        "type": {"const": "loop-end"},
+        "title": {"type": "string"}
+      },
+      "additionalProperties": true
+    },
+    "document-extractor": {
+      "type": "object",
+      "required": ["type", "title"],
+      "properties": {
+        "type": {"const": "document-extractor"},
+        "title": {"type": "string"},
+        "variable_selector": {"type": "array"},
+        "version": {"type": "string"}
+      },
+      "additionalProperties": true
+    },
+    "list-operator": {
+      "type": "object",
+      "required": ["type", "title"],
+      "properties": {
+        "type": {"const": "list-operator"},
+        "title": {"type": "string"},
+        "operation": {"type": "string"},
+        "version": {"type": "string"}
+      },
+      "additionalProperties": true
+    },
+    "agent": {
+      "type": "object",
+      "required": ["type", "title"],
+      "properties": {
+        "type": {"const": "agent"},
+        "title": {"type": "string"},
+        "model": {"type": "object"},
+        "strategy": {"type": "string"},
+        "tools": {"type": "array"},
+        "prompt_template": {"type": "array"},
+        "version": {"type": "string"}
+      },
+      "additionalProperties": true
+    },
+    "knowledge-index": {
+      "type": "object",
+      "required": ["type", "title"],
+      "properties": {
+        "type": {"const": "knowledge-index"},
+        "title": {"type": "string"},
+        "version": {"type": "string"}
+      },
+      "additionalProperties": true
+    },
+    "datasource": {
+      "type": "object",
+      "required": ["type", "title"],
+      "properties": {
+        "type": {"const": "datasource"},
+        "title": {"type": "string"},
+        "datasource_type": {"type": "string"},
+        "version": {"type": "string"}
+      },
+      "additionalProperties": true
+    },
+    "human-input": {
+      "type": "object",
+      "required": ["type", "title"],
+      "properties": {
+        "type": {"const": "human-input"},
+        "title": {"type": "string"},
+        "answer": {"type": "string"},
+        "version": {"type": "string"}
+      },
+      "additionalProperties": true
+    },
+    "trigger-webhook": {
+      "type": "object",
+      "required": ["type", "title"],
+      "properties": {
+        "type": {"const": "trigger-webhook"},
+        "title": {"type": "string"},
+        "version": {"type": "string"}
+      },
+      "additionalProperties": true
+    },
+    "trigger-schedule": {
+      "type": "object",
+      "required": ["type", "title"],
+      "properties": {
+        "type": {"const": "trigger-schedule"},
+        "title": {"type": "string"},
+        "trigger_type": {"type": "string"},
+        "version": {"type": "string"}
+      },
+      "additionalProperties": true
+    },
+    "trigger-plugin": {
+      "type": "object",
+      "required": ["type", "title"],
+      "properties": {
+        "type": {"const": "trigger-plugin"},
+        "title": {"type": "string"},
+        "version": {"type": "string"}
+      },
+      "additionalProperties": true
+    }
+  }
+}
