@@ -73,13 +73,31 @@ def test_build_node_validates_llm():
     assert node["targetPosition"] == "left"
 
 
-def test_build_node_fills_array_defaults():
+def test_build_node_uses_frontend_defaults():
     node = build_node(
         node_type="start",
         dsl_version=DSL_VERSION,
         title="Start",
     )
     assert node["data"]["variables"] == []
+
+
+def test_build_node_layers_frontend_defaults():
+    node = build_node(
+        node_type="llm",
+        dsl_version=DSL_VERSION,
+        title="T",
+        fields=[
+            "model.name=gpt-4o",
+        ],
+    )
+    # User field overlays frontend default
+    assert node["data"]["model"]["name"] == "gpt-4o"
+    # Frontend defaults preserved where user didn't override
+    assert node["data"]["model"]["mode"] == "chat"
+    assert node["data"]["model"]["completion_params"]["temperature"] == 0.7
+    assert node["data"]["context"]["enabled"] is False
+    assert node["data"]["prompt_template"][0]["role"] == "system"
 
 
 def test_build_node_rejects_bad_enum():

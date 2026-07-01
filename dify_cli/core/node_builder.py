@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import copy
 import json
 from typing import Any
 
 from . import graph as graph_mod
 from .errors import NodeValidationError
-from .schema_store import get_node_schema
+from .schema_store import get_node_defaults, get_node_schema
 
 _SENTINEL = object()
 
@@ -46,14 +47,15 @@ _DEFAULT_NODE_WIDTH = 244
 _DEFAULT_NODE_HEIGHT = 90
 
 
-def _apply_array_defaults(data: dict[str, Any], schema: dict[str, Any]) -> None:
-    """Fill empty arrays for optional array fields the frontend expects present."""
-    props = schema.get("properties", {})
-    for name, sub in props.items():
-        if name in data:
-            continue
-        if sub.get("type") == "array":
-            data[name] = []
+def _deep_merge(base: dict[str, Any], overlay: dict[str, Any]) -> dict[str, Any]:
+    """Recursively merge overlay into base; overlay wins on conflicts."""
+    result: dict[str, Any] = copy.deepcopy(base)
+    for k, v in overlay.items():
+        if isinstance(v, dict) and isinstance(result.get(k), dict):
+            result[k] = _deep_merge(result[k], v)
+        else:
+            result[k] = copy.deepcopy(v)
+    return result
 
 
 def build_node(
@@ -66,14 +68,23 @@ def build_node(
     position: dict[str, float] | None = None,
 ) -> dict[str, Any]:
     schema = get_node_schema(dsl_version, node_type)
-    data: dict[str, Any] = {"type": node_type}
+
+    # Start from the frontend's defaultValue template (the exact `data` the UI
+    # uses when creating a node). This guarantees the resulting DSL matches
+    # what the UI produces and imports cleanly.
+    frontend_defaults = get_node_defaults(dsl_version, node_type)
+    data: dict[str, Any] = copy.deepcopy(frontend_defaults) if frontend_defaults else {}
+    data["type"] = node_type
     if title:
         data["title"] = title
     data.setdefault("desc", "")
     data.setdefault("selected", False)
+
     if fields:
-        apply_fields(data, fields)
-    _apply_array_defaults(data, schema)
+        user_overlay: dict[str, Any] = {}
+        apply_fields(user_overlay, fields)
+        data = _deep_merge(data, user_overlay)
+
     validate_node_data(node_type, data, schema)
     pos = position or {"x": 0.0, "y": 0.0}
     return {

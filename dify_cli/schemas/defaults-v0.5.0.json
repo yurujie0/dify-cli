@@ -1,0 +1,269 @@
+{
+  "dsl_version": "0.5.0",
+  "node_defaults": {
+    "agent": {
+      "tool_node_version": "2"
+    },
+    "answer": {
+      "variables": [],
+      "answer": ""
+    },
+    "assigner": {
+      "version": "2",
+      "items": []
+    },
+    "code": {
+      "code": "",
+      "code_language": "python3",
+      "variables": [],
+      "outputs": {}
+    },
+    "datasource": {
+      "datasource_parameters": {},
+      "datasource_configurations": {}
+    },
+    "datasource-empty": {},
+    "document-extractor": {
+      "variable_selector": [],
+      "is_array_file": false
+    },
+    "end": {
+      "outputs": []
+    },
+    "http-request": {
+      "variables": [],
+      "method": "get",
+      "url": "",
+      "authorization": {
+        "type": "no-auth",
+        "config": null
+      },
+      "headers": "",
+      "params": "",
+      "body": {
+        "type": "none",
+        "data": []
+      },
+      "ssl_verify": true,
+      "timeout": {
+        "max_connect_timeout": 0,
+        "max_read_timeout": 0,
+        "max_write_timeout": 0
+      },
+      "retry_config": {
+        "retry_enabled": true,
+        "max_retries": 3,
+        "retry_interval": 100
+      }
+    },
+    "if-else": {
+      "_targetBranches": [
+        {
+          "id": "true",
+          "name": "IF"
+        },
+        {
+          "id": "false",
+          "name": "ELSE"
+        }
+      ],
+      "cases": [
+        {
+          "case_id": "true",
+          "logical_operator": "and",
+          "conditions": []
+        }
+      ]
+    },
+    "iteration": {
+      "start_node_id": "",
+      "iterator_selector": [],
+      "output_selector": [],
+      "_children": [],
+      "_isShowTips": false,
+      "is_parallel": false,
+      "parallel_nums": 10,
+      "error_handle_mode": "terminated",
+      "flatten_output": true
+    },
+    "iteration-start": {},
+    "knowledge-index": {
+      "index_chunk_variable_selector": [],
+      "keyword_number": 10,
+      "retrieval_model": {
+        "top_k": 3,
+        "score_threshold_enabled": false,
+        "score_threshold": 0.5
+      }
+    },
+    "knowledge-retrieval": {
+      "query_variable_selector": [],
+      "query_attachment_selector": [],
+      "dataset_ids": [],
+      "retrieval_mode": "multiple",
+      "multiple_retrieval_config": {
+        "top_k": 4,
+        "reranking_enable": false
+      }
+    },
+    "list-operator": {
+      "variable": [],
+      "filter_by": {
+        "enabled": false,
+        "conditions": []
+      },
+      "extract_by": {
+        "enabled": false,
+        "serial": "1"
+      },
+      "order_by": {
+        "enabled": false,
+        "key": "",
+        "value": "asc"
+      },
+      "limit": {
+        "enabled": false,
+        "size": 10
+      }
+    },
+    "llm": {
+      "model": {
+        "provider": "",
+        "name": "",
+        "mode": "chat",
+        "completion_params": {
+          "temperature": 0.7
+        }
+      },
+      "prompt_template": [
+        {
+          "role": "system",
+          "text": ""
+        }
+      ],
+      "context": {
+        "enabled": false,
+        "variable_selector": []
+      },
+      "vision": {
+        "enabled": false
+      }
+    },
+    "loop": {
+      "start_node_id": "",
+      "break_conditions": [],
+      "loop_count": 10,
+      "_children": [],
+      "logical_operator": "and"
+    },
+    "loop-end": {},
+    "loop-start": {},
+    "parameter-extractor": {
+      "query": [],
+      "model": {
+        "provider": "",
+        "name": "",
+        "mode": "chat",
+        "completion_params": {
+          "temperature": 0.7
+        }
+      },
+      "reasoning_mode": "prompt",
+      "vision": {
+        "enabled": false
+      }
+    },
+    "question-classifier": {
+      "query_variable_selector": [],
+      "model": {
+        "provider": "",
+        "name": "",
+        "mode": "chat",
+        "completion_params": {
+          "temperature": 0.7
+        }
+      },
+      "classes": [
+        {
+          "id": "1",
+          "name": ""
+        },
+        {
+          "id": "2",
+          "name": ""
+        }
+      ],
+      "_targetBranches": [
+        {
+          "id": "1",
+          "name": ""
+        },
+        {
+          "id": "2",
+          "name": ""
+        }
+      ],
+      "vision": {
+        "enabled": false
+      }
+    },
+    "start": {
+      "variables": []
+    },
+    "template-transform": {
+      "template": "",
+      "variables": []
+    },
+    "tool": {
+      "tool_parameters": {},
+      "tool_configurations": {},
+      "tool_node_version": "2"
+    },
+    "trigger-plugin": {
+      "plugin_id": "",
+      "event_name": "",
+      "event_parameters": {},
+      "config": {}
+    },
+    "trigger-schedule": {
+      "mode": "visual",
+      "frequency": "daily",
+      "visual_config": {
+        "time": "12:00 AM",
+        "weekdays": [
+          "sun"
+        ],
+        "on_minute": 0,
+        "monthly_days": [
+          1
+        ]
+      },
+      "cron_expression": ""
+    },
+    "trigger-webhook": {
+      "webhook_url": "",
+      "method": "POST",
+      "content_type": "application/json",
+      "headers": [],
+      "params": [],
+      "body": [],
+      "async_mode": true,
+      "status_code": 200,
+      "response_body": "",
+      "variables": [
+        {
+          "variable": "_webhook_raw",
+          "label": "raw",
+          "value_type": "object",
+          "value_selector": [],
+          "required": true
+        }
+      ]
+    },
+    "variable-aggregator": {
+      "output_type": "any",
+      "variables": []
+    }
+  },
+  "skipped": []
+}
