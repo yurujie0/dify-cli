@@ -202,12 +202,15 @@ These fields have shapes that are easy to get wrong. When a node fails validatio
 python -c "import json; print(json.dumps(json.load(open('dify_cli/schemas/v0.5.0.json'))['node_types']['<type>'], indent=2))"
 ```
 
-**if-else `cases[].conditions[]`** uses `variable_selector` (array of node-id path segments), NOT `variable`:
+**if-else `cases[].conditions[]`** uses `variable_selector` (array of node-id path segments), NOT `variable`. The `value` field accepts only string / array[string] / boolean / null — **not number**. To compare against a number, convert to string or use an operator like `not empty`:
 
 ```bash
-# CORRECT
+# CORRECT: string value
 --field 'cases=[{"case_id":"true","logical_operator":"and","conditions":[{"variable_selector":["start-1","input"],"comparison_operator":"contains","value":"hello"}]}]'
+# CORRECT: empty check (no value needed)
+--field 'cases=[{"case_id":"true","logical_operator":"and","conditions":[{"variable_selector":["code-1","keywords"],"comparison_operator":"not empty","value":null}]}]'
 # WRONG (will fail validation): variable instead of variable_selector
+# WRONG: numeric value (value: 0) — use a string operator instead
 ```
 
 **http-request `headers` / `params`** are **strings** (one `key: value` per line), not objects or arrays:
@@ -239,6 +242,28 @@ Authorization: Bearer xxx'
 ```
 
 **Comparison operators** for if-else/code conditions include string forms like `contains`, `is`, `empty`, `not empty`, plus symbol forms `=`, `≠`, `>`, `<`. Check the schema enum for the full list.
+
+**code node `variables[]`** items are `{variable: <name>, value_selector: [<node-id>, <output>]}` — the `variable` is the Python function parameter name, `value_selector` is the path to the upstream output:
+
+```bash
+--field 'variables=[{"variable":"name","value_selector":["start-1","name"]},{"variable":"count","value_selector":["start-1","count"]}]'
+```
+
+**code node `outputs`** is an object mapping output name → `{type: <SegmentType>}`. SegmentType values include `string`, `number`, `object`, `array[string]`, `array[object]`, `array[number]`, `boolean`, `file`, `array[file]`, `secret`, `none`:
+
+```bash
+--field 'outputs={"items":{"type":"array[object]"},"summary":{"type":"object"},"count":{"type":"number"}}'
+```
+
+**iteration node** requires `iterator_selector` (the array to loop over), `output_selector` (path to the output collected from each iteration), and `start_node_id` (the iteration-start node id). The iteration-start node is a separate node of type `iteration-start` that lives inside the iteration subgraph:
+
+```bash
+dify-cli node add iteration --title "Loop" --id iter-1 \
+  --field 'iterator_selector=["code-1","items"]' \
+  --field 'output_selector=["code-2","result"]' \
+  --field 'start_node_id=iter-start-1'
+dify-cli node add iteration-start --title "Iter Start" --id iter-start-1
+```
 
 
 
