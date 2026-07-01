@@ -107,6 +107,20 @@ def test_build_node_layers_frontend_defaults():
     assert node["data"]["prompt_template"][0]["role"] == "system"
 
 
+def test_build_node_patches_if_else_conditions():
+    node = build_node(
+        node_type="if-else",
+        dsl_version=DSL_VERSION,
+        title="Branch",
+        fields=[
+            'cases=[{"case_id":"true","logical_operator":"and","conditions":[{"variable_selector":["start-1","input"],"comparison_operator":"contains","value":"hi"}]}]',
+        ],
+    )
+    cond = node["data"]["cases"][0]["conditions"][0]
+    assert "id" in cond and isinstance(cond["id"], str) and len(cond["id"]) > 0
+    assert cond["varType"] == "string"
+
+
 def test_build_node_rejects_bad_enum():
     with pytest.raises(NodeValidationError) as exc:
         build_node(

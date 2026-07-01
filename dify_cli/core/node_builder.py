@@ -59,6 +59,30 @@ _DEFAULT_NODE_WIDTH = 244
 _DEFAULT_NODE_HEIGHT = 90
 
 
+def _post_process(node_type: str, data: dict[str, Any]) -> None:
+    """Fill in fields the frontend expects but the backend schema doesn't require.
+
+    The backend Pydantic models and the frontend TypeScript types diverge for
+    some nodes — the frontend has extra fields (React keys, varType hints)
+    that it accesses without null guards. Patch these in here after the user
+    overlay is applied, before validation.
+    """
+    if node_type == "if-else":
+        _patch_if_else_conditions(data)
+
+
+def _patch_if_else_conditions(data: dict[str, Any]) -> None:
+    """Each condition needs an `id` (React key) and `varType` (UI rendering).
+    The backend model has neither; the frontend crashes without them.
+    """
+    import uuid
+
+    for case in data.get("cases") or []:
+        for cond in case.get("conditions") or []:
+            cond.setdefault("id", uuid.uuid4().hex)
+            cond.setdefault("varType", "string")
+
+
 def _deep_merge(base: dict[str, Any], overlay: dict[str, Any]) -> dict[str, Any]:
     """Recursively merge overlay into base; overlay wins on conflicts."""
     result: dict[str, Any] = copy.deepcopy(base)
@@ -97,6 +121,7 @@ def build_node(
         apply_fields(user_overlay, fields)
         data = _deep_merge(data, user_overlay)
 
+    _post_process(node_type, data)
     validate_node_data(node_type, data, schema)
     pos = position or {"x": 0.0, "y": 0.0}
     return {

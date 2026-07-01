@@ -30,13 +30,16 @@ def add_node(doc, node: dict[str, Any]) -> None:
 
 
 def remove_node(doc, node_id: str) -> bool:
-    node = find_node(doc.nodes, node_id)
+    nodes = doc.nodes
+    node = find_node(nodes, node_id)
     if node is None:
         return False
-    doc.nodes = [n for n in doc.nodes if n.get("id") != node_id]
-    doc.edges = [
+    # Mutate in place — doc.nodes is a read-only property.
+    nodes[:] = [n for n in nodes if n.get("id") != node_id]
+    edges = doc.edges
+    edges[:] = [
         e
-        for e in doc.edges
+        for e in edges
         if e.get("source") != node_id and e.get("target") != node_id
     ]
     return True
@@ -47,9 +50,10 @@ def add_edge(doc, edge: dict[str, Any]) -> None:
 
 
 def remove_edge(doc, edge_id: str) -> bool:
-    before = len(doc.edges)
-    doc.edges = [e for e in doc.edges if e.get("id") != edge_id]
-    return len(doc.edges) < before
+    edges = doc.edges
+    before = len(edges)
+    edges[:] = [e for e in edges if e.get("id") != edge_id]
+    return len(edges) < before
 
 
 def validate_graph(doc) -> list[str]:

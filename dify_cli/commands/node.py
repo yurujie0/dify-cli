@@ -79,7 +79,7 @@ def edit(
     field: list[str] = typer.Option([], "--field", help="key=value to set (dotted keys supported)"),
 ) -> None:
     """Edit fields on an existing node."""
-    from ..core.node_builder import apply_fields
+    from ..core.node_builder import _post_process, apply_fields
     doc = _load(file)
     node = graph_mod.find_node(doc.nodes, node_id)
     if node is None:
@@ -88,6 +88,7 @@ def edit(
     apply_fields(data, field)
     ntype = data.get("type")
     if ntype:
+        _post_process(ntype, data)
         schema = get_node_schema(doc.version, ntype)
         validate_node_data(ntype, data, schema)
     dsl_mod.save(file, doc)
