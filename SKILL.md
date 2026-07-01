@@ -194,7 +194,53 @@ These are the most-used node types (full list via `dify-cli node types`):
 | Agent | `agent` | `model`, `strategy`, `tools` |
 | Answer | `answer` | `answer` (template string) |
 
-## Typical workflows
+## Node field gotchas
+
+These fields have shapes that are easy to get wrong. When a node fails validation, run `dify-cli node show <id>` to inspect, or check the schema directly:
+
+```bash
+python -c "import json; print(json.dumps(json.load(open('dify_cli/schemas/v0.5.0.json'))['node_types']['<type>'], indent=2))"
+```
+
+**if-else `cases[].conditions[]`** uses `variable_selector` (array of node-id path segments), NOT `variable`:
+
+```bash
+# CORRECT
+--field 'cases=[{"case_id":"true","logical_operator":"and","conditions":[{"variable_selector":["start-1","input"],"comparison_operator":"contains","value":"hello"}]}]'
+# WRONG (will fail validation): variable instead of variable_selector
+```
+
+**http-request `headers` / `params`** are **strings** (one `key: value` per line), not objects or arrays:
+
+```bash
+# CORRECT
+--field 'headers=Content-Type: application/json
+Authorization: Bearer xxx'
+# WRONG (will fail validation): object or array
+--field 'headers={"Content-Type":"application/json"}'
+```
+
+**http-request `body`** is an object with `type` (`none`/`form-data`/`x-www-form-urlencoded`/`raw-text`/`json`/`binary`) and `data`:
+
+```bash
+--field 'body={"type":"json","data":[{"key":"","type":"text","value":"{\"key\":\"val\"}"}]}'
+```
+
+**end `outputs[]`** items use `variable` (the output name) + `value_selector` (array path to the upstream node's output):
+
+```bash
+--field 'outputs=[{"variable":"result","value_selector":["llm-1","text"]}]'
+```
+
+**variable-aggregator `variables`** is an array of arrays (each inner array is a value selector):
+
+```bash
+--field 'variables=[["node-1","output"],["node-2","output"]]'
+```
+
+**Comparison operators** for if-else/code conditions include string forms like `contains`, `is`, `empty`, `not empty`, plus symbol forms `=`, `≠`, `>`, `<`. Check the schema enum for the full list.
+
+
 
 ### Minimal LLM workflow
 
@@ -232,9 +278,11 @@ dify-cli node edit llm-1 \
 ```bash
 dify-cli init --mode advanced-chat --name "Chatbot" -o chat.yaml --force
 dify-cli var conversation set user_name --type string --description "Remembered name" -f chat.yaml
+dify-cli var env set SYSTEM_PROMPT "You are a helpful assistant." -f chat.yaml
 dify-cli node add start --title "Start" --id start-1 -f chat.yaml
 dify-cli node add llm --title "Reply" --id llm-1 \
   --field model.provider=openai --field model.name=gpt-4o \
+  --field 'prompt_template=[{"role":"system","text":"{{#env.SYSTEM_PROMPT#}}"},{"role":"user","text":"{{#sys.query#}}"}]' \
   -f chat.yaml
 dify-cli node add answer --title "Answer" --id answer-1 \
   --field 'answer={{#llm-1.text#}}' \
@@ -243,6 +291,8 @@ dify-cli edge add start-1 llm-1 -f chat.yaml
 dify-cli edge add llm-1 answer-1 -f chat.yaml
 dify-cli validate chat.yaml
 ```
+
+Note: `var env set` takes `NAME VALUE` as positional args (not `--value`). `var conversation set` takes `NAME` positional plus `--type`/`--description` options.
 
 ## Importing into Dify
 
