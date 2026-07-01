@@ -30,17 +30,28 @@ def add(
 ) -> None:
     """Add an edge between two nodes."""
     doc = _load(file)
-    if graph_mod.find_node(doc.nodes, source) is None:
+    src_node = graph_mod.find_node(doc.nodes, source)
+    if src_node is None:
         raise DifyCliError(f"Source node {source!r} not found")
-    if graph_mod.find_node(doc.nodes, target) is None:
+    dst_node = graph_mod.find_node(doc.nodes, target)
+    if dst_node is None:
         raise DifyCliError(f"Target node {target!r} not found")
+    src_type = (src_node.get("data") or {}).get("type", "")
+    dst_type = (dst_node.get("data") or {}).get("type", "")
     edge = {
         "id": edge_id or graph_mod.new_edge_id(),
         "source": source,
         "target": target,
-        "sourceHandle": source_handle,
-        "targetHandle": target_handle,
+        "sourceHandle": source_handle or "source",
+        "targetHandle": target_handle or "target",
         "type": "custom",
+        "zIndex": 0,
+        "data": {
+            "sourceType": src_type,
+            "targetType": dst_type,
+            "isInIteration": False,
+            "isInLoop": False,
+        },
     }
     graph_mod.add_edge(doc, edge)
     dsl_mod.save(file, doc)

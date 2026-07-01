@@ -64,8 +64,13 @@ def test_build_node_validates_llm():
             'prompt_template=[{"role":"user","text":"hi"}]',
         ],
     )
+    assert node["type"] == "custom"
     assert node["data"]["type"] == "llm"
     assert node["data"]["model"]["name"] == "gpt-4o"
+    assert node["positionAbsolute"] == node["position"]
+    assert node["width"] == 244
+    assert node["sourcePosition"] == "right"
+    assert node["targetPosition"] == "left"
 
 
 def test_build_node_rejects_bad_enum():

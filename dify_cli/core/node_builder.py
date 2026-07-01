@@ -42,6 +42,10 @@ def apply_fields(target: dict[str, Any], fields: list[str]) -> None:
         _set_dotted(target, key.strip(), parse_field_value(raw))
 
 
+_DEFAULT_NODE_WIDTH = 244
+_DEFAULT_NODE_HEIGHT = 90
+
+
 def build_node(
     *,
     node_type: str,
@@ -49,19 +53,29 @@ def build_node(
     node_id: str | None = None,
     title: str | None = None,
     fields: list[str] | None = None,
+    position: dict[str, float] | None = None,
 ) -> dict[str, Any]:
     schema = get_node_schema(dsl_version, node_type)
     data: dict[str, Any] = {"type": node_type}
     if title:
         data["title"] = title
+    data.setdefault("desc", "")
+    data.setdefault("selected", False)
     if fields:
         apply_fields(data, fields)
     validate_node_data(node_type, data, schema)
+    pos = position or {"x": 0.0, "y": 0.0}
     return {
         "id": node_id or graph_mod.new_node_id(node_type),
-        "type": node_type,
+        "type": "custom",
         "data": data,
-        "position": {"x": 0, "y": 0},
+        "position": pos,
+        "positionAbsolute": {"x": pos["x"], "y": pos["y"]},
+        "width": _DEFAULT_NODE_WIDTH,
+        "height": _DEFAULT_NODE_HEIGHT,
+        "selected": False,
+        "sourcePosition": "right",
+        "targetPosition": "left",
     }
 
 
