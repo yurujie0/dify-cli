@@ -46,6 +46,16 @@ _DEFAULT_NODE_WIDTH = 244
 _DEFAULT_NODE_HEIGHT = 90
 
 
+def _apply_array_defaults(data: dict[str, Any], schema: dict[str, Any]) -> None:
+    """Fill empty arrays for optional array fields the frontend expects present."""
+    props = schema.get("properties", {})
+    for name, sub in props.items():
+        if name in data:
+            continue
+        if sub.get("type") == "array":
+            data[name] = []
+
+
 def build_node(
     *,
     node_type: str,
@@ -63,6 +73,7 @@ def build_node(
     data.setdefault("selected", False)
     if fields:
         apply_fields(data, fields)
+    _apply_array_defaults(data, schema)
     validate_node_data(node_type, data, schema)
     pos = position or {"x": 0.0, "y": 0.0}
     return {

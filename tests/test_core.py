@@ -73,6 +73,15 @@ def test_build_node_validates_llm():
     assert node["targetPosition"] == "left"
 
 
+def test_build_node_fills_array_defaults():
+    node = build_node(
+        node_type="start",
+        dsl_version=DSL_VERSION,
+        title="Start",
+    )
+    assert node["data"]["variables"] == []
+
+
 def test_build_node_rejects_bad_enum():
     with pytest.raises(NodeValidationError) as exc:
         build_node(
