@@ -45,6 +45,13 @@ def test_parse_field_value_json():
     assert parse_field_value("plain") == "plain"
 
 
+def test_parse_field_value_from_file(tmp_path):
+    f = tmp_path / "code.py"
+    f.write_text("import json\nresult = {'x': 1}\n", encoding="utf-8")
+    val = parse_field_value(f"@{f}")
+    assert val == "import json\nresult = {'x': 1}\n"
+
+
 def test_apply_fields_dotted():
     target: dict = {}
     apply_fields(target, ["model.name=gpt-4o", "model.mode=chat"])

@@ -103,10 +103,26 @@ dify-cli node types [--file dsl.yaml]
 **`--field` syntax** (critical):
 
 - Format: `key=value`. Key supports **dotted paths** for nested assignment: `model.name=gpt-4o` sets `data.model.name`.
-- Value parsing:
-  - Starts with `{` or `[` → parsed as JSON: `--field 'context={"enabled": false}'`, `--field 'prompt_template=[{"role":"user","text":"hi"}]'`
-  - Otherwise → plain string: `--field model.provider=openai`
+- Value parsing (in order):
+  1. **`@filename`** → reads value from a file (use for multi-line content like code blocks): `--field code=@mycode.py`
+  2. **`@-`** → reads value from stdin (use with heredoc): `--field code=@- <<'PY' ... PY`
+  3. Starts with `{` or `[` → parsed as JSON: `--field 'context={"enabled": false}'`, `--field 'prompt_template=[{"role":"user","text":"hi"}]'`
+  4. Otherwise → plain string: `--field model.provider=openai`
 - Repeat `--field` for multiple fields.
+
+**Passing multi-line code** (common pitfall): do NOT use `--field code="line1\nline2"` — `\n` stays as two literal characters. Either write the code to a file first and use `@file`, or pipe via stdin:
+
+```bash
+# Recommended: write code to a file, reference it
+cat > mycode.py <<'PY'
+import json
+result = {"answer": "hello " + arg1}
+PY
+dify-cli node add code --title "Run Code" --id code-1 \
+  --field code=@mycode.py \
+  --field 'variables=[{"variable":"arg1","value_selector":["start-1","input"]}]' \
+  --field 'outputs={"answer":{"type":"string"}}'
+```
 
 Node IDs: auto-generated as `<type>-<8hex>` if `--id` omitted. Pass `--id` for stable, human-readable IDs (recommended for scripted workflows).
 

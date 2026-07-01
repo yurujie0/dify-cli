@@ -26,6 +26,18 @@ def _set_dotted(target: dict[str, Any], dotted_key: str, value: Any) -> None:
 def parse_field_value(raw: str) -> Any:
     if raw is None:
         return None
+    # @filename: read value from a file (handles multi-line code, etc.)
+    # @- reads from stdin.
+    if raw.startswith("@"):
+        target = raw[1:]
+        if target == "-":
+            import sys
+            return sys.stdin.read()
+        from pathlib import Path
+        p = Path(target)
+        if not p.exists():
+            raise NodeValidationError("", f"Field value file not found: {target}")
+        return p.read_text(encoding="utf-8")
     s = raw.strip()
     if s and s[0] in "{[":
         try:
