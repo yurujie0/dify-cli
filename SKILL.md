@@ -25,6 +25,18 @@ Do NOT use for:
 - Importing DSLs into Dify (that's the Dify web UI's job — this tool only generates/edits the file)
 - Managing Dify instances, datasets, or plugins
 
+## Quick probe (for agents)
+
+Before scaffolding, an agent can probe the environment with these commands. Both work without any DSL file:
+
+```bash
+dify-cli --version        # prints "dify-cli <version>" (or: dify-cli version)
+dify-cli node types       # lists all node types in the latest bundled schema (28 types)
+dify-cli node types -v 0.5.0   # list types for a specific DSL version
+```
+
+`dify-cli node types` does NOT require a DSL file — it reads from the bundled schema. Use it to discover what node types are available before `dify-cli init`.
+
 ## Installation
 
 The CLI lives at `cli/` in the dify repo. For development use:

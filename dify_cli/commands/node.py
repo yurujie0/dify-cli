@@ -109,9 +109,30 @@ def remove(
 
 @app.command("types")
 def types(
-    file: Path = typer.Option(Path("dsl.yaml"), "--file", "-f"),
+    dsl_version: Optional[str] = typer.Option(
+        None, "--dsl-version", "-v",
+        help="DSL version to list types for (defaults to the latest bundled version)",
+    ),
+    file: Optional[Path] = typer.Option(
+        None, "--file", "-f",
+        help="DSL file to read the version from (overrides --dsl-version)",
+    ),
 ) -> None:
-    """List node types known by the DSL's schema bundle."""
-    doc = dsl_mod.load(file)
-    for t in node_types(doc.version):
+    """List node types known by the DSL's schema bundle.
+
+    Without -f or -v, lists types for the latest bundled DSL version —
+    useful for agents probing what's available before scaffolding a DSL.
+    """
+    if file is not None:
+        doc = dsl_mod.load(file)
+        ver = doc.version
+    elif dsl_version is not None:
+        ver = dsl_version
+    else:
+        from ..core.schema_store import available_versions
+        versions = available_versions()
+        if not versions:
+            raise DifyCliError("No schema bundles installed")
+        ver = versions[-1]
+    for t in node_types(ver):
         typer.echo(t)
