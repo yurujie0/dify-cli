@@ -58,6 +58,15 @@ def apply_fields(target: dict[str, Any], fields: list[str]) -> None:
 _DEFAULT_NODE_WIDTH = 244
 _DEFAULT_NODE_HEIGHT = 90
 
+# Iteration/loop start nodes use a dedicated ReactFlow renderer
+# (custom-iteration-start / custom-loop-start), not the generic "custom".
+# The frontend looks up the renderer by the top-level `type` field and
+# crashes if it's "custom" for these node types.
+_REACTFLOW_TYPE_OVERRIDES = {
+    "iteration-start": "custom-iteration-start",
+    "loop-start": "custom-loop-start",
+}
+
 
 def _post_process(node_type: str, data: dict[str, Any]) -> None:
     """Fill in runtime fields the frontend generates on user interaction but
@@ -150,7 +159,7 @@ def build_node(
     pos = position or {"x": 0.0, "y": 0.0}
     return {
         "id": node_id or graph_mod.new_node_id(node_type),
-        "type": "custom",
+        "type": _REACTFLOW_TYPE_OVERRIDES.get(node_type, "custom"),
         "data": data,
         "position": pos,
         "positionAbsolute": {"x": pos["x"], "y": pos["y"]},

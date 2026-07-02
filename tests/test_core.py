@@ -161,6 +161,16 @@ def test_build_node_patches_knowledge_retrieval_metadata_conditions():
     assert "id" in cond and len(cond["id"]) > 0
 
 
+def test_build_node_uses_custom_iteration_start_type():
+    node = build_node(node_type="iteration-start", dsl_version=DSL_VERSION, title="Iter Start")
+    assert node["type"] == "custom-iteration-start"
+
+
+def test_build_node_uses_custom_loop_start_type():
+    node = build_node(node_type="loop-start", dsl_version=DSL_VERSION, title="Loop Start")
+    assert node["type"] == "custom-loop-start"
+
+
 def test_build_node_rejects_bad_enum():
     with pytest.raises(NodeValidationError) as exc:
         build_node(
