@@ -121,6 +121,46 @@ def test_build_node_patches_if_else_conditions():
     assert cond["varType"] == "string"
 
 
+def test_build_node_patches_loop_break_conditions():
+    node = build_node(
+        node_type="loop",
+        dsl_version=DSL_VERSION,
+        title="Loop",
+        fields=[
+            'break_conditions=[{"variable_selector":["start-1","x"],"comparison_operator":">","value":"10"}]',
+        ],
+    )
+    cond = node["data"]["break_conditions"][0]
+    assert "id" in cond and len(cond["id"]) > 0
+    assert cond["varType"] == "string"
+
+
+def test_build_node_patches_loop_variables():
+    node = build_node(
+        node_type="loop",
+        dsl_version=DSL_VERSION,
+        title="Loop",
+        fields=[
+            'loop_variables=[{"label":"i","var_type":"string","value_type":"constant","value":"0"}]',
+        ],
+    )
+    lv = node["data"]["loop_variables"][0]
+    assert "id" in lv and len(lv["id"]) > 0
+
+
+def test_build_node_patches_knowledge_retrieval_metadata_conditions():
+    node = build_node(
+        node_type="knowledge-retrieval",
+        dsl_version=DSL_VERSION,
+        title="KR",
+        fields=[
+            'metadata_filtering_conditions={"logical_operator":"and","conditions":[{"name":"title","comparison_operator":"is"}]}',
+        ],
+    )
+    cond = node["data"]["metadata_filtering_conditions"]["conditions"][0]
+    assert "id" in cond and len(cond["id"]) > 0
+
+
 def test_build_node_rejects_bad_enum():
     with pytest.raises(NodeValidationError) as exc:
         build_node(

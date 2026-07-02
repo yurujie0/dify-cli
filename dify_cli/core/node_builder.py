@@ -60,27 +60,51 @@ _DEFAULT_NODE_HEIGHT = 90
 
 
 def _post_process(node_type: str, data: dict[str, Any]) -> None:
-    """Fill in fields the frontend expects but the backend schema doesn't require.
+    """Fill in runtime fields the frontend generates on user interaction but
+    the backend schema doesn't require.
 
-    The backend Pydantic models and the frontend TypeScript types diverge for
-    some nodes — the frontend has extra fields (React keys, varType hints)
-    that it accesses without null guards. Patch these in here after the user
-    overlay is applied, before validation.
+    When a user clicks "add condition" / "add variable" in the UI, the
+    frontend's use-config.ts generates id (React key), varType (UI rendering),
+    groupId, etc. via uuid4(). Static extraction from default.ts cannot capture
+    these — they're created in event handlers, not in defaultValue.
+
+    Rather than special-case each node type, we walk the data tree and patch
+    any object that looks like a frontend-generated child element (condition,
+    loop variable, group) with the missing runtime fields. The shape rules are
+    distilled from use-config.ts handleAddXxx handlers across nodes.
     """
-    if node_type == "if-else":
-        _patch_if_else_conditions(data)
+    _walk_and_patch(data)
 
 
-def _patch_if_else_conditions(data: dict[str, Any]) -> None:
-    """Each condition needs an `id` (React key) and `varType` (UI rendering).
-    The backend model has neither; the frontend crashes without them.
+def _walk_and_patch(obj: Any) -> None:
+    """Recursively patch runtime-generated fields on child elements.
+
+    Rules (from frontend use-config.ts handlers):
+    - Condition object (has variable_selector + comparison_operator): needs id + varType
+    - Metadata condition (has name + comparison_operator, no variable_selector): needs id
+    - Loop variable (has var_type): needs id
+    - Group (has groupId): groupId is its own id field, leave as-is
+    - Any object with varType but no id: needs id
     """
     import uuid
 
-    for case in data.get("cases") or []:
-        for cond in case.get("conditions") or []:
-            cond.setdefault("id", uuid.uuid4().hex)
-            cond.setdefault("varType", "string")
+    if isinstance(obj, dict):
+        is_condition = "variable_selector" in obj and "comparison_operator" in obj
+        is_metadata_condition = (
+            "name" in obj and "comparison_operator" in obj and "variable_selector" not in obj
+        )
+        is_loop_variable = "var_type" in obj
+
+        if is_condition or is_metadata_condition or is_loop_variable or "varType" in obj:
+            obj.setdefault("id", uuid.uuid4().hex)
+            if is_condition:
+                obj.setdefault("varType", "string")
+
+        for v in obj.values():
+            _walk_and_patch(v)
+    elif isinstance(obj, list):
+        for item in obj:
+            _walk_and_patch(item)
 
 
 def _deep_merge(base: dict[str, Any], overlay: dict[str, Any]) -> dict[str, Any]:
