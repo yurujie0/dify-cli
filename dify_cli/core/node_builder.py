@@ -42,8 +42,16 @@ def parse_field_value(raw: str) -> Any:
     if s and s[0] in "{[":
         try:
             return json.loads(s)
-        except json.JSONDecodeError:
-            pass
+        except json.JSONDecodeError as e:
+            # Surface the JSON error clearly so the agent knows the value
+            # was meant as JSON but is malformed (common: missing quotes around
+            # strings, trailing commas, unquoted node ids like [123,foo]).
+            raise NodeValidationError(
+                "",
+                f"value looks like JSON (starts with {s[0]!r}) but failed to parse: {e.msg}. "
+                f"Common fix: quote strings — e.g. '[\"1783404896636\",\"batches\"]' not '[1783404896636,batches]'. "
+                f"Or use --fields-file to load from a JSON file.",
+            )
     return raw
 
 
