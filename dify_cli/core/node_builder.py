@@ -76,6 +76,15 @@ _NODE_DIMENSIONS = {
 }
 
 
+# Common agent mistakes that can be auto-corrected before validation.
+# Maps node_type -> {field: {bad_value: good_value}}.
+_FIELD_NORMALIZERS = {
+    "code": {
+        "code_language": {"python": "python3", "py": "python3", "js": "javascript"},
+    },
+}
+
+
 def _post_process(node_type: str, data: dict[str, Any]) -> None:
     """Fill in runtime fields the frontend generates on user interaction but
     the backend schema doesn't require.
@@ -90,7 +99,20 @@ def _post_process(node_type: str, data: dict[str, Any]) -> None:
     loop variable, group) with the missing runtime fields. The shape rules are
     distilled from use-config.ts handleAddXxx handlers across nodes.
     """
+    _normalize_fields(node_type, data)
     _walk_and_patch(data)
+
+
+def _normalize_fields(node_type: str, data: dict[str, Any]) -> None:
+    """Auto-correct common agent mistakes before schema validation rejects them.
+
+    Example: code.code_language='python' -> 'python3' (schema enum is
+    ['python3','javascript'], agents often write 'python').
+    """
+    rules = _FIELD_NORMALIZERS.get(node_type, {})
+    for field, mapping in rules.items():
+        if field in data and data[field] in mapping:
+            data[field] = mapping[data[field]]
 
 
 def _walk_and_patch(obj: Any) -> None:

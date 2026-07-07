@@ -161,6 +161,21 @@ def test_build_node_patches_knowledge_retrieval_metadata_conditions():
     assert "id" in cond and len(cond["id"]) > 0
 
 
+def test_build_node_normalizes_code_language_python():
+    node = build_node(
+        node_type="code",
+        dsl_version=DSL_VERSION,
+        title="Code",
+        fields=[
+            "code_language=python",
+            "code=def main(): return {}",
+            'variables=[]',
+            'outputs={}',
+        ],
+    )
+    assert node["data"]["code_language"] == "python3"
+
+
 def test_build_node_uses_custom_iteration_start_type():
     node = build_node(node_type="iteration-start", dsl_version=DSL_VERSION, title="Iter Start")
     assert node["type"] == "custom-iteration-start"

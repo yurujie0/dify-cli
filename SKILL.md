@@ -324,6 +324,8 @@ Authorization: Bearer xxx'
 --field 'outputs={"items":{"type":"array[object]"},"summary":{"type":"object"},"count":{"type":"number"}}'
 ```
 
+**code node `code_language`** accepts only `python3` or `javascript` — NOT `python` (the schema enum rejects it). The CLI auto-corrects `python`→`python3` and `js`→`javascript`, but write the correct value explicitly when possible.
+
 **iteration node** requires `iterator_selector` (the array to loop over), `output_selector` (path to the output collected from each iteration), and `start_node_id` (the iteration-start node id). The iteration-start node is a separate node of type `iteration-start` that lives inside the iteration subgraph:
 
 ```bash
