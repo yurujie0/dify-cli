@@ -94,7 +94,7 @@ Produces a minimal DSL skeleton with empty `workflow.graph` (for workflow/advanc
 
 ```bash
 # Add a node — most common command
-dify-cli node add <node_type> [--id ID] [--title T] [--field key=value]... [--file dsl.yaml]
+dify-cli node add <node_type> [--title T] [--field key=value]... [--file dsl.yaml]
 
 # List all nodes
 dify-cli node list [--file dsl.yaml]
@@ -130,13 +130,15 @@ cat > mycode.py <<'PY'
 import json
 result = {"answer": "hello " + arg1}
 PY
-dify-cli node add code --title "Run Code" --id code-1 \
+dify-cli node add code --title "Run Code" \
   --field code=@mycode.py \
-  --field 'variables=[{"variable":"arg1","value_selector":["start-1","input"]}]' \
+  --field 'variables=[{"variable":"arg1","value_selector":["<start-node-id>","input"]}]' \
   --field 'outputs={"answer":{"type":"string"}}'
 ```
 
-Node IDs: auto-generated as `<type>-<8hex>` if `--id` omitted. Pass `--id` for stable, human-readable IDs (recommended for scripted workflows).
+Replace `<start-node-id>` with the actual id from `dify-cli node list`.
+
+Node IDs are auto-generated as millisecond timestamps (e.g. `1783395438602`), matching the Dify frontend's `Date.now()` algorithm. Adding an `iteration` or `loop` node also auto-creates its start child node with id `<parent_id>start` and links the parent's `start_node_id`. To reference node ids (e.g. for edges or `value_selector`), run `dify-cli node list` after adding.
 
 ### `dify-cli edge` — edge CRUD
 
@@ -283,30 +285,36 @@ dify-cli node add iteration-start --title "Iter Start" --id iter-start-1
 
 ```bash
 dify-cli init --mode workflow --name "My App" -o app.yaml --force
-dify-cli node add start --title "Start" --id start-1 -f app.yaml
-dify-cli node add llm --title "Call GPT" --id llm-1 \
+dify-cli node add start --title "Start" -f app.yaml
+START_ID=$(dify-cli node list -f app.yaml | awk '$2=="start"{print $1; exit}')
+dify-cli node add llm --title "Call GPT" \
   --field model.provider=openai \
   --field model.name=gpt-4o \
   -f app.yaml
-dify-cli node add end --title "End" --id end-1 \
-  --field 'outputs=[{"variable":"result","value_selector":["llm-1","text"]}]' \
+LLM_ID=$(dify-cli node list -f app.yaml | awk '$2=="llm"{print $1; exit}')
+dify-cli node add end --title "End" \
+  --field "outputs=[{\"variable\":\"result\",\"value_selector\":[\"$LLM_ID\",\"text\"]}]" \
   -f app.yaml
-dify-cli edge add start-1 llm-1 -f app.yaml
-dify-cli edge add llm-1 end-1 -f app.yaml
+END_ID=$(dify-cli node list -f app.yaml | awk '$2=="end"{print $1; exit}')
+dify-cli edge add "$START_ID" "$LLM_ID" -f app.yaml
+dify-cli edge add "$LLM_ID" "$END_ID" -f app.yaml
 dify-cli validate app.yaml
 ```
 
-Note: the LLM node only needs `model.provider` and `model.name` — `mode`, `completion_params.temperature`, `prompt_template`, `context`, `vision` all come from the frontend defaults template.
+Note: the LLM node only needs `model.provider` and `model.name` — `mode`, `completion_params.temperature`, `prompt_template`, `context`, `vision` all come from the frontend defaults template. Node ids are millisecond timestamps (matching the Dify frontend); use `node list` to look them up for edges and `value_selector`.
 
 ### Editing an existing node
 
 ```bash
-# Change the model on an LLM node
-dify-cli node edit llm-1 --field model.name=gpt-4o-mini -f app.yaml
+# Look up the node id from `node list`
+LLM_ID=$(dify-cli node list -f app.yaml | awk '$2=="llm"{print $1; exit}')
+
+# Change the model on the LLM node
+dify-cli node edit "$LLM_ID" --field model.name=gpt-4o-mini -f app.yaml
 
 # Add a system prompt
-dify-cli node edit llm-1 \
-  --field 'prompt_template=[{"role":"system","text":"You are helpful."},{"role":"user","text":"{{#start-1.input#}}"}]' \
+dify-cli node edit "$LLM_ID" \
+  --field 'prompt_template=[{"role":"system","text":"You are helpful."},{"role":"user","text":"{{#sys.query#}}"}]' \
   -f app.yaml
 ```
 
@@ -316,16 +324,19 @@ dify-cli node edit llm-1 \
 dify-cli init --mode advanced-chat --name "Chatbot" -o chat.yaml --force
 dify-cli var conversation set user_name --type string --description "Remembered name" -f chat.yaml
 dify-cli var env set SYSTEM_PROMPT "You are a helpful assistant." -f chat.yaml
-dify-cli node add start --title "Start" --id start-1 -f chat.yaml
-dify-cli node add llm --title "Reply" --id llm-1 \
+dify-cli node add start --title "Start" -f chat.yaml
+START_ID=$(dify-cli node list -f chat.yaml | awk '$2=="start"{print $1; exit}')
+dify-cli node add llm --title "Reply" \
   --field model.provider=openai --field model.name=gpt-4o \
   --field 'prompt_template=[{"role":"system","text":"{{#env.SYSTEM_PROMPT#}}"},{"role":"user","text":"{{#sys.query#}}"}]' \
   -f chat.yaml
-dify-cli node add answer --title "Answer" --id answer-1 \
-  --field 'answer={{#llm-1.text#}}' \
+LLM_ID=$(dify-cli node list -f chat.yaml | awk '$2=="llm"{print $1; exit}')
+dify-cli node add answer --title "Answer" \
+  --field "answer={{#$LLM_ID.text#}}" \
   -f chat.yaml
-dify-cli edge add start-1 llm-1 -f chat.yaml
-dify-cli edge add llm-1 answer-1 -f chat.yaml
+ANSWER_ID=$(dify-cli node list -f chat.yaml | awk '$2=="answer"{print $1; exit}')
+dify-cli edge add "$START_ID" "$LLM_ID" -f chat.yaml
+dify-cli edge add "$LLM_ID" "$ANSWER_ID" -f chat.yaml
 dify-cli validate chat.yaml
 ```
 
