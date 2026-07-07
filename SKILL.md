@@ -146,8 +146,16 @@ Node IDs are auto-generated as millisecond timestamps (e.g. `1783395438602`), ma
 dify-cli node add iteration --title "Loop" -f app.yaml
 ITER_ID=$(dify-cli node list -f app.yaml | awk '$2=="iteration"{print $1; exit}')
 dify-cli node add code --title "Inner" --parent "$ITER_ID" -f app.yaml \
-  --field "variables=[{\"variable\":\"item\",\"value_selector\":[\"${ITER_ID}start\",\"output\"]}]"
+  --field "variables=[{\"variable\":\"item\",\"value_selector\":[\"$ITER_ID\",\"item\"]}]"
 ```
+
+**Iteration variable references**: inside an iteration, the current element is exposed as `<iteration_id>.item` and the index as `<iteration_id>.index` — NOT `<iter-start-id>.output`. The iteration-start node is just a subgraph entry marker; the iteration node itself injects `item`/`index` into the variable pool each loop. Connect `iter-start → <first-inner-node>` as the subgraph entry edge, and the iteration node's `output_selector` points to the inner node's output that gets collected into the iteration's `output` array.
+
+**Iteration edges**: the inner subgraph nodes should NOT connect directly to external nodes (e.g. End). The iteration node's `output_selector` aggregates inner outputs, and the iteration node itself connects to the next external node. Typical edge pattern:
+- `<prev> → <iteration>` (enter iteration)
+- `<iter-start> → <first-inner>` (subgraph entry)
+- `<inner> → <inner>` (subgraph internal)
+- `<iteration> → <next>` (exit iteration, carrying aggregated `output`)
 
 ### `dify-cli edge` — edge CRUD
 
