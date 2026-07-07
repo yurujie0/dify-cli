@@ -45,6 +45,6 @@ def validate(
 
     if errors:
         for e in errors:
-            typer.secho(f"✗ {e}", fg=typer.colors.RED)
+            typer.secho(f"FAIL {e}", fg=typer.colors.RED)
         raise typer.Exit(code=1)
-    typer.secho(f"✓ {file} is valid (dsl_version={dsl_version})", fg=typer.colors.GREEN)
+    typer.secho(f"OK {file} is valid (dsl_version={dsl_version})", fg=typer.colors.GREEN)
