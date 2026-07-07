@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 import uuid
 from typing import Any
 
@@ -9,7 +10,18 @@ _START_NODE_TYPES = {"start", "datasource", "trigger-webhook", "trigger-schedule
 
 
 def new_node_id(node_type: str) -> str:
-    return f"{node_type}-{uuid.uuid4().hex[:8]}"
+    """Generate a node id matching the Dify frontend algorithm.
+
+    The frontend (web/app/components/workflow/utils/node.ts:generateNewNode)
+    uses `String(Date.now())` — a millisecond timestamp as a string. We mirror
+    that so CLI-generated ids look identical to UI-generated ones.
+    """
+    return str(int(time.time() * 1000))
+
+
+def new_iteration_start_id(iteration_node_id: str) -> str:
+    """Iteration-start child node id: parent_id + 'start' (frontend convention)."""
+    return f"{iteration_node_id}start"
 
 
 def new_edge_id() -> str:

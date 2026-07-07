@@ -144,7 +144,7 @@ def build_node(
     frontend_defaults = get_node_defaults(dsl_version, node_type)
     data: dict[str, Any] = copy.deepcopy(frontend_defaults) if frontend_defaults else {}
     data["type"] = node_type
-    if title:
+    if title is not None:
         data["title"] = title
     data.setdefault("desc", "")
     data.setdefault("selected", False)

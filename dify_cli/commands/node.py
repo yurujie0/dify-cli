@@ -25,20 +25,41 @@ def _load(file: Path):
 def add(
     node_type: str = typer.Argument(..., help="Node type, e.g. llm / start / end / http-request"),
     file: Path = typer.Option(Path("dsl.yaml"), "--file", "-f"),
-    node_id: Optional[str] = typer.Option(None, "--id", help="Explicit node id (auto-generated if omitted)"),
     title: Optional[str] = typer.Option(None, "--title", "-t"),
     field: list[str] = typer.Option([], "--field", help="key=value, dotted keys supported; JSON if value starts with { or ["),
 ) -> None:
-    """Add a node to the workflow graph."""
+    """Add a node to the workflow graph.
+
+    Node id is auto-generated as a millisecond timestamp (matching the
+    Dify frontend's Date.now() algorithm). Iteration/loop nodes also
+    auto-create their start child node with id '<parent_id>start'.
+    """
     doc = _load(file)
     node = build_node(
         node_type=node_type,
         dsl_version=doc.version,
-        node_id=node_id,
         title=title,
         fields=field or None,
     )
     graph_mod.add_node(doc, node)
+
+    # Iteration/loop nodes auto-create their start child node (frontend behavior).
+    if node_type in ("iteration", "loop"):
+        start_type = "iteration-start" if node_type == "iteration" else "loop-start"
+        start_node = build_node(
+            node_type=start_type,
+            dsl_version=doc.version,
+            title="",  # frontend default; backend schema requires the field present
+            fields=None,
+        )
+        start_node["id"] = graph_mod.new_iteration_start_id(node["id"])
+        start_node["parentId"] = node["id"]
+        start_node["data"]["isInIteration"] = node_type == "iteration"
+        start_node["data"]["isInLoop"] = node_type == "loop"
+        # Link parent's start_node_id
+        node["data"]["start_node_id"] = start_node["id"]
+        graph_mod.add_node(doc, start_node)
+
     dsl_mod.save(file, doc)
     typer.secho(f"Added node {node['id']!r} (type={node_type})", fg=typer.colors.GREEN)
 
