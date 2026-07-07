@@ -26,6 +26,7 @@ def add(
     node_type: str = typer.Argument(..., help="Node type, e.g. llm / start / end / http-request"),
     file: Path = typer.Option(Path("dsl.yaml"), "--file", "-f"),
     title: Optional[str] = typer.Option(None, "--title", "-t"),
+    parent: Optional[str] = typer.Option(None, "--parent", "-p", help="Parent iteration/loop node id (places this node inside the container)"),
     field: list[str] = typer.Option([], "--field", help="key=value, dotted keys supported; JSON if value starts with { or ["),
 ) -> None:
     """Add a node to the workflow graph.
@@ -33,6 +34,10 @@ def add(
     Node id is auto-generated as a millisecond timestamp (matching the
     Dify frontend's Date.now() algorithm). Iteration/loop nodes also
     auto-create their start child node with id '<parent_id>start'.
+
+    Use --parent to place a node inside an iteration/loop container;
+    this sets parentId, isInIteration/isInLoop, and the child zIndex so
+    ReactFlow renders it inside the container.
     """
     doc = _load(file)
     node = build_node(
@@ -41,6 +46,25 @@ def add(
         title=title,
         fields=field or None,
     )
+
+    # Attach to a parent iteration/loop container if requested.
+    if parent:
+        parent_node = graph_mod.find_node(doc.nodes, parent)
+        if parent_node is None:
+            raise DifyCliError(f"Parent node {parent!r} not found")
+        parent_type = (parent_node.get("data") or {}).get("type")
+        if parent_type not in ("iteration", "loop"):
+            raise DifyCliError(f"Parent {parent!r} is {parent_type!r}, not iteration/loop")
+        node["parentId"] = parent
+        node["zIndex"] = 1002  # ITERATION/LOOP_CHILDREN_Z_INDEX
+        node["extent"] = "parent"
+        if parent_type == "iteration":
+            node["data"]["isInIteration"] = True
+            node["data"]["iteration_id"] = parent
+        else:
+            node["data"]["isInLoop"] = True
+            node["data"]["loop_id"] = parent
+
     graph_mod.add_node(doc, node)
 
     # Iteration/loop nodes auto-create their start child node (frontend behavior).

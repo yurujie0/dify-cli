@@ -94,7 +94,7 @@ Produces a minimal DSL skeleton with empty `workflow.graph` (for workflow/advanc
 
 ```bash
 # Add a node — most common command
-dify-cli node add <node_type> [--title T] [--field key=value]... [--file dsl.yaml]
+dify-cli node add <node_type> [--title T] [--parent <iter-or-loop-id>] [--field key=value]... [--file dsl.yaml]
 
 # List all nodes
 dify-cli node list [--file dsl.yaml]
@@ -139,6 +139,15 @@ dify-cli node add code --title "Run Code" \
 Replace `<start-node-id>` with the actual id from `dify-cli node list`.
 
 Node IDs are auto-generated as millisecond timestamps (e.g. `1783395438602`), matching the Dify frontend's `Date.now()` algorithm. Adding an `iteration` or `loop` node also auto-creates its start child node with id `<parent_id>start` and links the parent's `start_node_id`. To reference node ids (e.g. for edges or `value_selector`), run `dify-cli node list` after adding.
+
+**Placing nodes inside iteration/loop containers**: use `--parent <iter-or-loop-id>` when adding a node that should live inside a container. This sets `parentId`, `extent: "parent"`, `zIndex: 1002`, and `data.isInIteration`/`iteration_id` (or `isInLoop`/`loop_id`) so ReactFlow renders the node inside the container:
+
+```bash
+dify-cli node add iteration --title "Loop" -f app.yaml
+ITER_ID=$(dify-cli node list -f app.yaml | awk '$2=="iteration"{print $1; exit}')
+dify-cli node add code --title "Inner" --parent "$ITER_ID" -f app.yaml \
+  --field "variables=[{\"variable\":\"item\",\"value_selector\":[\"${ITER_ID}start\",\"output\"]}]"
+```
 
 ### `dify-cli edge` — edge CRUD
 
