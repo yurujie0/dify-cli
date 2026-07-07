@@ -58,6 +58,10 @@ def add(
         node["parentId"] = parent
         node["zIndex"] = 1002  # ITERATION/LOOP_CHILDREN_Z_INDEX
         node["extent"] = "parent"
+        # Default position inside the container: to the right of iteration-start
+        # (which sits at {24, 68}). Matches real fixture layout.
+        node["position"] = {"x": 128, "y": 68}
+        node["positionAbsolute"] = {"x": 128, "y": 68}
         if parent_type == "iteration":
             node["data"]["isInIteration"] = True
             node["data"]["iteration_id"] = parent

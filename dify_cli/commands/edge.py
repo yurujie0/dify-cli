@@ -38,6 +38,18 @@ def add(
         raise DifyCliError(f"Target node {target!r} not found")
     src_type = (src_node.get("data") or {}).get("type", "")
     dst_type = (dst_node.get("data") or {}).get("type", "")
+    # An edge is "in iteration/loop" if both endpoints share the same parentId
+    # (i.e. both live inside the same container). The frontend uses this to
+    # render the edge clipped to the container.
+    src_parent = src_node.get("parentId")
+    dst_parent = dst_node.get("parentId")
+    shared_parent = bool(src_parent) and src_parent == dst_parent
+    parent_data = {}
+    if shared_parent:
+        parent = graph_mod.find_node(doc.nodes, src_parent)
+        parent_data = (parent.get("data") or {}) if parent else {}
+    in_iteration = shared_parent and parent_data.get("type") == "iteration"
+    in_loop = shared_parent and parent_data.get("type") == "loop"
     edge = {
         "id": edge_id or graph_mod.new_edge_id(),
         "source": source,
@@ -45,12 +57,12 @@ def add(
         "sourceHandle": source_handle or "source",
         "targetHandle": target_handle or "target",
         "type": "custom",
-        "zIndex": 0,
+        "zIndex": 1002 if (in_iteration or in_loop) else 0,
         "data": {
             "sourceType": src_type,
             "targetType": dst_type,
-            "isInIteration": False,
-            "isInLoop": False,
+            "isInIteration": in_iteration,
+            "isInLoop": in_loop,
         },
     }
     graph_mod.add_edge(doc, edge)
