@@ -28,6 +28,7 @@ def add(
     title: Optional[str] = typer.Option(None, "--title", "-t"),
     parent: Optional[str] = typer.Option(None, "--parent", "-p", help="Parent iteration/loop node id (places this node inside the container)"),
     field: list[str] = typer.Option([], "--field", help="key=value, dotted keys supported; JSON if value starts with { or ["),
+    fields_file: Optional[Path] = typer.Option(None, "--fields-file", help="Read field overrides from a JSON file (object of {key: value}); avoids shell quoting issues"),
 ) -> None:
     """Add a node to the workflow graph.
 
@@ -38,13 +39,29 @@ def add(
     Use --parent to place a node inside an iteration/loop container;
     this sets parentId, isInIteration/isInLoop, and the child zIndex so
     ReactFlow renders it inside the container.
+
+    Use --fields-file to load field overrides from a JSON file when
+    values contain shell metacharacters (& | ; > < space quote) that
+    make --field quoting error-prone.
     """
+    fields = list(field)
+    if fields_file is not None:
+        import json as _json
+        data = _json.loads(fields_file.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            raise DifyCliError(f"--fields-file must contain a JSON object, got {type(data).__name__}")
+        for k, v in data.items():
+            if isinstance(v, (dict, list)):
+                fields.append(f"{k}={_json.dumps(v, ensure_ascii=False)}")
+            else:
+                fields.append(f"{k}={v}")
+
     doc = _load(file)
     node = build_node(
         node_type=node_type,
         dsl_version=doc.version,
         title=title,
-        fields=field or None,
+        fields=fields or None,
     )
 
     # Attach to a parent iteration/loop container if requested.
@@ -133,15 +150,27 @@ def edit(
     node_id: str = typer.Argument(...),
     file: Path = typer.Option(Path("dsl.yaml"), "--file", "-f"),
     field: list[str] = typer.Option([], "--field", help="key=value to set (dotted keys supported)"),
+    fields_file: Optional[Path] = typer.Option(None, "--fields-file", help="Read field overrides from a JSON file (object of {key: value})"),
 ) -> None:
     """Edit fields on an existing node."""
     from ..core.node_builder import _post_process, apply_fields
+    fields = list(field)
+    if fields_file is not None:
+        import json as _json
+        data_obj = _json.loads(fields_file.read_text(encoding="utf-8"))
+        if not isinstance(data_obj, dict):
+            raise DifyCliError(f"--fields-file must contain a JSON object, got {type(data_obj).__name__}")
+        for k, v in data_obj.items():
+            if isinstance(v, (dict, list)):
+                fields.append(f"{k}={_json.dumps(v, ensure_ascii=False)}")
+            else:
+                fields.append(f"{k}={v}")
     doc = _load(file)
     node = graph_mod.find_node(doc.nodes, node_id)
     if node is None:
         raise DifyCliError(f"Node {node_id!r} not found")
     data = node.setdefault("data", {})
-    apply_fields(data, field)
+    apply_fields(data, fields)
     ntype = data.get("type")
     if ntype:
         _post_process(ntype, data)
