@@ -44,20 +44,27 @@ def add(
     graph_mod.add_node(doc, node)
 
     # Iteration/loop nodes auto-create their start child node (frontend behavior).
+    # Mirrors web/app/components/workflow/utils/node.ts:getIterationStartNode.
     if node_type in ("iteration", "loop"):
         start_type = "iteration-start" if node_type == "iteration" else "loop-start"
         start_node = build_node(
             node_type=start_type,
             dsl_version=doc.version,
-            title="",  # frontend default; backend schema requires the field present
+            title="",
             fields=None,
+            position={"x": 24, "y": 68},
         )
         start_node["id"] = graph_mod.new_iteration_start_id(node["id"])
         start_node["parentId"] = node["id"]
+        start_node["zIndex"] = 1002  # ITERATION/LOOP_CHILDREN_Z_INDEX
+        start_node["selectable"] = False
+        start_node["draggable"] = False
         start_node["data"]["isInIteration"] = node_type == "iteration"
         start_node["data"]["isInLoop"] = node_type == "loop"
         # Link parent's start_node_id
         node["data"]["start_node_id"] = start_node["id"]
+        # Parent iteration/loop node gets zIndex 1 (ITERATION/LOOP_NODE_Z_INDEX)
+        node["zIndex"] = 1
         graph_mod.add_node(doc, start_node)
 
     dsl_mod.save(file, doc)

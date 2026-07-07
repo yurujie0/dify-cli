@@ -67,6 +67,14 @@ _REACTFLOW_TYPE_OVERRIDES = {
     "loop-start": "custom-loop-start",
 }
 
+# Container nodes are larger than regular nodes (matches frontend defaults).
+_NODE_DIMENSIONS = {
+    "iteration": (388, 178),
+    "loop": (388, 178),
+    "iteration-start": (44, 48),
+    "loop-start": (44, 48),
+}
+
 
 def _post_process(node_type: str, data: dict[str, Any]) -> None:
     """Fill in runtime fields the frontend generates on user interaction but
@@ -157,14 +165,15 @@ def build_node(
     _post_process(node_type, data)
     validate_node_data(node_type, data, schema)
     pos = position or {"x": 0.0, "y": 0.0}
+    width, height = _NODE_DIMENSIONS.get(node_type, (_DEFAULT_NODE_WIDTH, _DEFAULT_NODE_HEIGHT))
     return {
         "id": node_id or graph_mod.new_node_id(node_type),
         "type": _REACTFLOW_TYPE_OVERRIDES.get(node_type, "custom"),
         "data": data,
         "position": pos,
         "positionAbsolute": {"x": pos["x"], "y": pos["y"]},
-        "width": _DEFAULT_NODE_WIDTH,
-        "height": _DEFAULT_NODE_HEIGHT,
+        "width": width,
+        "height": height,
         "selected": False,
         "sourcePosition": "right",
         "targetPosition": "left",
