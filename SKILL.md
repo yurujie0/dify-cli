@@ -122,43 +122,34 @@ dify-cli node types [--file dsl.yaml]
   4. Otherwise → plain string: `--field model.provider=openai`
 - Repeat `--field` for multiple fields.
 
-**Shell quoting (critical for agents)**: always wrap `--field` values in **single quotes** if they contain any of: `&`, `|`, `;`, `>`, `<`, space, `=`, `"`, `'`, `\`. Without quotes the shell will mangle the value silently — the command appears to succeed but the field is truncated or wrong, causing confusing retry loops.
+**Passing JSON values (arrays/objects) - use `--fields-file` to avoid shell quoting issues**:
+
+Shell quoting is NOT portable across Linux/macOS (bash) and Windows (cmd/PowerShell). A command like `--field 'iterator_selector=["123","batches"]'` works on Linux but on Windows the double quotes get stripped by the shell, arriving as `iterator_selector=[{123,batches}]` which fails JSON parsing. Agents then retry-loop.
+
+**For any field whose value is JSON (starts with `{` or `[`), prefer `--fields-file`** over `--field`. Write the fields to a JSON file and pass the path - no shell quoting involved, identical behavior on every platform:
 
 ```bash
-# WRONG: & is a shell metacharacter, format=json is lost
---field url=https://api.example.com/data?id=1&format=json
-
-# CORRECT: single quotes preserve the literal value
---field 'url=https://api.example.com/data?id=1&format=json'
-
-# WRONG: spaces and quotes break parsing
---field headers=Content-Type: application/json
-
-# CORRECT
---field 'headers=Content-Type: application/json'
-```
-
-For values with embedded single quotes, use the `'"'"'` trick or write the value to a file and use `@file`:
-```bash
-printf 'value with "quotes" inside\n' > /tmp/v.txt
---field some_field=@/tmp/v.txt
-```
-
-**`--fields-file` (escape hatch for complex values)**: when a node needs many fields or values contain shell metacharacters, write all fields to a JSON file and pass `--fields-file /path/to/fields.json`. The JSON object's keys support dotted paths; values can be strings, numbers, booleans, arrays, or objects (auto-serialized to JSON):
-
-```bash
-cat > /tmp/http_fields.json <<'EOF'
+cat > /tmp/fields.json <<'EOF'
 {
-  "url": "https://api.example.com/data?id=1&format=json",
-  "method": "get",
-  "headers": "Content-Type: application/json\nAuthorization: Bearer sk-xxx",
-  "body": {"type": "json", "data": [{"key": "", "type": "text", "value": "{\"q\":\"hi\"}"}]}
+  "iterator_selector": ["1783404896636", "batches"],
+  "output_selector": ["inner-code-id", "upper"]
 }
 EOF
-dify-cli node add http-request --title "Fetch" -f app.yaml --fields-file /tmp/http_fields.json
+dify-cli node add iteration --title "Loop" -f app.yaml --fields-file /tmp/fields.json
 ```
 
-`node edit` also supports `--fields-file`. Use this whenever `--field` quoting becomes error-prone.
+The JSON object's keys support dotted paths; values can be strings, numbers, booleans, arrays, or objects (auto-serialized to JSON). `node edit` also supports `--fields-file`.
+
+**When `--field` is fine**: simple string values without shell metacharacters (`model.name=gpt-4o`, `code_language=python3`). For values with `&`, `|`, `;`, `>`, `<`, space, `=`, `"`, `'`, `\`, either single-quote on Linux/macOS or use `--fields-file` / `@file` for cross-platform safety.
+
+```bash
+# Linux/macOS only (single quotes preserve the literal value)
+--field 'url=https://api.example.com/data?id=1&format=json'
+
+# Cross-platform (use @file)
+printf 'https://api.example.com/data?id=1&format=json' > /tmp/url.txt
+--field url=@/tmp/url.txt
+```
 
 **Passing multi-line code** (common pitfall): do NOT use `--field code="line1\nline2"` — `\n` stays as two literal characters. Either write the code to a file first and use `@file`, or pipe via stdin:
 

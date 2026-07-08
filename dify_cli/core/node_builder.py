@@ -43,14 +43,14 @@ def parse_field_value(raw: str) -> Any:
         try:
             return json.loads(s)
         except json.JSONDecodeError as e:
-            # Surface the JSON error clearly so the agent knows the value
-            # was meant as JSON but is malformed (common: missing quotes around
-            # strings, trailing commas, unquoted node ids like [123,foo]).
+            # Surface the JSON error clearly. Common causes:
+            # - missing quotes around strings: [123,foo] instead of ["123","foo"]
+            # - Windows shell stripped double quotes from --field '...["x","y"]...'
             raise NodeValidationError(
                 "",
                 f"value looks like JSON (starts with {s[0]!r}) but failed to parse: {e.msg}. "
-                f"Common fix: quote strings — e.g. '[\"1783404896636\",\"batches\"]' not '[1783404896636,batches]'. "
-                f"Or use --fields-file to load from a JSON file.",
+                f"This is often a Windows shell quoting issue (double quotes get stripped). "
+                f"Use --fields-file to pass JSON values portably across platforms.",
             )
     return raw
 
@@ -100,7 +100,7 @@ def _post_process(node_type: str, data: dict[str, Any]) -> None:
     When a user clicks "add condition" / "add variable" in the UI, the
     frontend's use-config.ts generates id (React key), varType (UI rendering),
     groupId, etc. via uuid4(). Static extraction from default.ts cannot capture
-    these — they're created in event handlers, not in defaultValue.
+    these - they're created in event handlers, not in defaultValue.
 
     Rather than special-case each node type, we walk the data tree and patch
     any object that looks like a frontend-generated child element (condition,
