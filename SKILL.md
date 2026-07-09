@@ -94,6 +94,8 @@ Produces a minimal DSL skeleton with empty `workflow.graph` (for workflow/advanc
 
 ```bash
 # Add a node — most common command
+# IMPORTANT: there is NO --id option. Node ids are auto-generated as
+# millisecond timestamps (matching the Dify frontend). Do NOT pass --id.
 dify-cli node add <node_type> [--title T] [--parent <iter-or-loop-id>] [--field key=value]... [--file dsl.yaml]
 
 # List all nodes
@@ -254,12 +256,39 @@ These are the most-used node types (full list via `dify-cli node types`):
 | Agent | `agent` | `model`, `strategy`, `tools` |
 | Answer | `answer` | `answer` (template string) |
 
-## Node field gotchas
+## How to look up node field requirements
 
-These fields have shapes that are easy to get wrong. When a node fails validation, run `dify-cli node show <id>` to inspect, or check the schema directly:
+The CLI bundles the full Dify node schema at `dify_cli/schemas/v0.5.0.json`. When unsure which fields a node type requires (or what values an enum accepts), query it directly instead of guessing:
 
 ```bash
-python -c "import json; print(json.dumps(json.load(open('dify_cli/schemas/v0.5.0.json'))['node_types']['<type>'], indent=2))"
+# List required fields + property names for a node type:
+python -c "import json; s=json.load(open('dify_cli/schemas/v0.5.0.json'))['node_types']['start']; print('required:', s.get('required')); print('properties:', list(s.get('properties',{}).keys()))"
+
+# Dump the full schema for a node type (incl. nested $defs):
+python -c "import json; print(json.dumps(json.load(open('dify_cli/schemas/v0.5.0.json'))['node_types']['start'], indent=2))"
+
+# Check an enum's allowed values:
+python -c "import json; d=json.load(open('dify_cli/schemas/v0.5.0.json'))['node_types']['start']['\$defs']; print(json.dumps(d['VariableEntityType'], indent=2))"
+```
+
+This is the authoritative source - faster and more accurate than reading the Dify source. The gotchas below cover the fields agents get wrong most often.
+
+## Node field gotchas
+
+These fields have shapes that are easy to get wrong. When a node fails validation, run `dify-cli node show <id>` to inspect, or check the schema directly (see above).
+
+**start `variables[]`** items require `variable`, `label`, and `type` (all required). `type` is one of: `text-input`, `paragraph`, `number`, `select`, `file`, `file-list`, `json_object`. For `select`, add `options: [...]`. Example:
+
+```bash
+dify-cli node add start --title "Start" -f app.yaml --fields-file /tmp/start.json
+# /tmp/start.json:
+# {
+#   "variables": [
+#     {"variable": "name", "label": "Name", "type": "text-input", "required": true},
+#     {"variable": "age", "label": "Age", "type": "number", "required": false},
+#     {"variable": "role", "label": "Role", "type": "select", "options": ["admin","user"], "required": true}
+#   ]
+# }
 ```
 
 **if-else `cases[].conditions[]`** uses `variable_selector` (array of node-id path segments), NOT `variable`. The `value` field accepts only string / array[string] / boolean / null — **not number**. To compare against a number, convert to string or use an operator like `not empty`:
@@ -320,11 +349,15 @@ Authorization: Bearer xxx'
 **iteration node** requires `iterator_selector` (the array to loop over), `output_selector` (path to the output collected from each iteration), and `start_node_id` (the iteration-start node id). The iteration-start node is a separate node of type `iteration-start` that lives inside the iteration subgraph:
 
 ```bash
-dify-cli node add iteration --title "Loop" --id iter-1 \
-  --field 'iterator_selector=["code-1","items"]' \
-  --field 'output_selector=["code-2","result"]' \
-  --field 'start_node_id=iter-start-1'
-dify-cli node add iteration-start --title "Iter Start" --id iter-start-1
+# Adding an iteration node auto-creates its iteration-start child node
+# (id = <iteration_id>start) and links start_node_id. Do NOT add the
+# start node separately or pass --id / start_node_id manually.
+dify-cli node add iteration --title "Loop" -f app.yaml \
+  --field 'iterator_selector=["<code-node-id>","items"]' \
+  --field 'output_selector=["<inner-node-id>","result"]'
+# To look up the auto-generated iteration id and start id:
+ITER_ID=$(dify-cli node list -f app.yaml | awk '$2=="iteration"{print $1; exit}')
+# Inner nodes use --parent and reference [<ITER_ID>,"item"] (see above)
 ```
 
 
