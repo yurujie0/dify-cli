@@ -235,6 +235,17 @@ Exits non-zero with `✗`-prefixed error list on failure. Run this before import
 
 Prints CLI version and bundled DSL schema versions.
 
+### `dify-cli schema` - inspect node schemas
+
+```bash
+dify-cli schema types                          # list all node types
+dify-cli schema node <type>                    # full JSON Schema for a node's data
+dify-cli schema node <type> --required-only    # just the required field names
+dify-cli schema enum <type> <field>            # allowed values for an enum field
+```
+
+Use this to discover which fields a node requires and what enum values are accepted - works on any installed dify-cli, no source access needed.
+
 ## Common node types
 
 These are the most-used node types (full list via `dify-cli node types`):
@@ -258,20 +269,23 @@ These are the most-used node types (full list via `dify-cli node types`):
 
 ## How to look up node field requirements
 
-The CLI bundles the full Dify node schema at `dify_cli/schemas/v0.5.0.json`. When unsure which fields a node type requires (or what values an enum accepts), query it directly instead of guessing:
+The CLI bundles the full Dify node schema and exposes it via `dify-cli schema` subcommands. When unsure which fields a node type requires (or what values an enum accepts), query it instead of guessing:
 
 ```bash
-# List required fields + property names for a node type:
-python -c "import json; s=json.load(open('dify_cli/schemas/v0.5.0.json'))['node_types']['start']; print('required:', s.get('required')); print('properties:', list(s.get('properties',{}).keys()))"
+# List required field names for a node type:
+dify-cli schema node start --required-only
 
-# Dump the full schema for a node type (incl. nested $defs):
-python -c "import json; print(json.dumps(json.load(open('dify_cli/schemas/v0.5.0.json'))['node_types']['start'], indent=2))"
+# Dump the full JSON Schema for a node type (incl. nested $defs, enums):
+dify-cli schema node start
 
-# Check an enum's allowed values:
-python -c "import json; d=json.load(open('dify_cli/schemas/v0.5.0.json'))['node_types']['start']['\$defs']; print(json.dumps(d['VariableEntityType'], indent=2))"
+# List all node types in the schema:
+dify-cli schema types
+
+# Look up an enum field's allowed values:
+dify-cli schema enum code code_language
 ```
 
-This is the authoritative source - faster and more accurate than reading the Dify source. The gotchas below cover the fields agents get wrong most often.
+These commands work on any installed dify-cli (no source access needed). The gotchas below cover the fields agents get wrong most often.
 
 ## Node field gotchas
 
