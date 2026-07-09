@@ -174,11 +174,19 @@ Node IDs are auto-generated as millisecond timestamps (e.g. `1783395438602`), ma
 **Placing nodes inside iteration/loop containers**: use `--parent <iter-or-loop-id>` when adding a node that should live inside a container. This sets `parentId`, `extent: "parent"`, `zIndex: 1002`, and `data.isInIteration`/`iteration_id` (or `isInLoop`/`loop_id`) so ReactFlow renders the node inside the container:
 
 ```bash
+# Adding an iteration auto-creates its start child node. The command output
+# prints BOTH ids - capture the iteration id for --parent and edges:
+#   Added node '1783590595490' (type=iteration), start child '1783590595490start' (type=iteration-start)
 dify-cli node add iteration --title "Loop" -f app.yaml
 ITER_ID=$(dify-cli node list -f app.yaml | awk '$2=="iteration"{print $1; exit}')
+ITER_START_ID="${ITER_ID}start"   # = <iteration_id>start, for the subgraph entry edge
 dify-cli node add code --title "Inner" --parent "$ITER_ID" -f app.yaml \
   --field "variables=[{\"variable\":\"item\",\"value_selector\":[\"$ITER_ID\",\"item\"]}]"
+# Connect iter-start -> Inner as the subgraph entry edge:
+dify-cli edge add "$ITER_START_ID" "$INNER_ID" -f app.yaml
 ```
+
+The iteration-start id is deterministic: `<iteration_id>start`. Do NOT add iteration-start separately or pass its id - it's auto-created and auto-linked to `start_node_id`.
 
 **Iteration variable references**: inside an iteration, the current element is exposed as `<iteration_id>.item` and the index as `<iteration_id>.index` — NOT `<iter-start-id>.output`. The iteration-start node is just a subgraph entry marker; the iteration node itself injects `item`/`index` into the variable pool each loop. Connect `iter-start → <first-inner-node>` as the subgraph entry edge, and the iteration node's `output_selector` points to the inner node's output that gets collected into the iteration's `output` array.
 
@@ -266,6 +274,25 @@ These are the most-used node types (full list via `dify-cli node types`):
 | Iteration | `iteration` | `iterator_selector`, `start_node_id` |
 | Agent | `agent` | `model`, `strategy`, `tools` |
 | Answer | `answer` | `answer` (template string) |
+
+### LLM prompt_template - prefer `--fields-file`
+
+The LLM node's `prompt_template` is a JSON array of message objects, often containing multi-line prompts, embedded quotes, and `{{#node-id.var#}}` template variables. Passing it inline via `--field` is error-prone (shell quoting, JSON escaping). **Prefer `--fields-file`** to configure `prompt_template`:
+
+```bash
+cat > /tmp/llm_fields.json <<'EOF'
+{
+  "model": {"provider": "openai", "name": "gpt-4o"},
+  "prompt_template": [
+    {"role": "system", "text": "You are a helpful assistant. Follow these rules:\n1. Be concise\n2. Use {{#start-1.input#}} as context"},
+    {"role": "user", "text": "Summarize the above."}
+  ]
+}
+EOF
+dify-cli node add llm --title "Call GPT" -f app.yaml --fields-file /tmp/llm_fields.json
+```
+
+If you only need a simple single-turn prompt, inline `--field` works too (on Linux/macOS with single quotes), but `--fields-file` is the cross-platform default for prompt_template.
 
 ## How to look up node field requirements
 
