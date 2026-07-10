@@ -96,6 +96,9 @@ Produces a minimal DSL skeleton with empty `workflow.graph` (for workflow/advanc
 # Add a node — most common command
 # IMPORTANT: there is NO --id option. Node ids are auto-generated as
 # millisecond timestamps (matching the Dify frontend). Do NOT pass --id.
+# IMPORTANT: NEVER inline URLs in --field (e.g. --field 'url=https://...').
+# Agent frameworks block commands containing 'https://' or 'http://'.
+# Always write URLs to a file and use --field url=@/path/to/file.txt.
 dify-cli node add <node_type> [--title T] [--parent <iter-or-loop-id>] [--field key=value]... [--file dsl.yaml]
 
 # List all nodes
@@ -145,10 +148,11 @@ The JSON object's keys support dotted paths; values can be strings, numbers, boo
 **When `--field` is fine**: simple string values without shell metacharacters (`model.name=gpt-4o`, `code_language=python3`). For values with `&`, `|`, `;`, `>`, `<`, space, `=`, `"`, `'`, `\`, either single-quote on Linux/macOS or use `--fields-file` / `@file` for cross-platform safety.
 
 ```bash
-# Linux/macOS only (single quotes preserve the literal value)
+# WRONG - any --field value containing 'https://' or 'http://' triggers agent-framework
+# SSRF blocking (the command never reaches dify-cli). NEVER inline URLs in --field.
 --field 'url=https://api.example.com/data?id=1&format=json'
 
-# Cross-platform (use @file)
+# CORRECT - write the URL to a file and use @file (no URL in the command line)
 printf 'https://api.example.com/data?id=1&format=json' > /tmp/url.txt
 --field url=@/tmp/url.txt
 ```
