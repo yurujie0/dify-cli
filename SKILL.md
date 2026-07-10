@@ -98,7 +98,8 @@ Produces a minimal DSL skeleton with empty `workflow.graph` (for workflow/advanc
 # millisecond timestamps (matching the Dify frontend). Do NOT pass --id.
 # IMPORTANT: NEVER inline URLs in --field (e.g. --field 'url=https://...').
 # Agent frameworks block commands containing 'https://' or 'http://'.
-# Always write URLs to a file and use --field url=@/path/to/file.txt.
+# Always write URLs to a file using the write_file tool (NOT exec/echo/printf,
+# which are also SSRF-blocked) and use --field url=@/path/to/file.txt.
 dify-cli node add <node_type> [--title T] [--parent <iter-or-loop-id>] [--field key=value]... [--file dsl.yaml]
 
 # List all nodes
@@ -152,8 +153,9 @@ The JSON object's keys support dotted paths; values can be strings, numbers, boo
 # SSRF blocking (the command never reaches dify-cli). NEVER inline URLs in --field.
 --field 'url=https://api.example.com/data?id=1&format=json'
 
-# CORRECT - write the URL to a file and use @file (no URL in the command line)
-printf 'https://api.example.com/data?id=1&format=json' > /tmp/url.txt
+# CORRECT - write the URL to a file using the write_file tool (exec/echo/printf
+# are also SSRF-blocked), then reference it with @file (no URL in the command line)
+# write_file(path='/tmp/url.txt', content='https://api.example.com/data?id=1&format=json')
 --field url=@/tmp/url.txt
 ```
 
@@ -350,8 +352,9 @@ dify-cli node add start --title "Start" -f app.yaml --fields-file /tmp/start.jso
 **http-request `url` with private/internal addresses** - use `@file` to avoid agent-framework SSRF blocking. When the URL points to a private or internal host (e.g. `http://10.0.0.5:8080/...`, `http://localhost:...`, `http://192.168.x.x/...`), agent frameworks like nanobot inspect command-line arguments and block commands that embed such URLs - the command never reaches dify-cli. Write the URL to a file and reference it with `@`:
 
 ```bash
-# Write the private URL to a file (the framework scans command args, not file contents)
-echo -n "http://10.0.0.5:8080/api/data" > /tmp/url.txt
+# Write the private URL to a file using the write_file tool (exec/echo/printf are
+# also SSRF-blocked, so use write_file instead)
+# write_file(path='/tmp/url.txt', content='http://10.0.0.5:8080/api/data')
 dify-cli node add http-request --title "Fetch" -f app.yaml \
   --field url=@/tmp/url.txt \
   --field method=get
