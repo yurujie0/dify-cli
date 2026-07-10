@@ -88,6 +88,8 @@ dify-cli init --mode <mode> --name <name> [--output dsl.yaml] [--dsl-version 0.5
 - `--dsl-version`: must match a bundled schema version (default `0.5.0`)
 - `--force`: overwrite existing file
 
+To regenerate a DSL, always run `dify-cli init ... --force` directly. NEVER use `rm`/`rm -rf`/`rm -r` to delete the old file first - those commands are blocked by agent safety guardrails. `--force` overwrites in place safely.
+
 Produces a minimal DSL skeleton with empty `workflow.graph` (for workflow/advanced-chat) or empty `model_config` (for chat/completion).
 
 ### `dify-cli node` — node CRUD
