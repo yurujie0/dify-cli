@@ -173,6 +173,22 @@ dify-cli var env set API_URL "$(cat /tmp/url.txt)" -f app.yaml
 
 Rule of thumb: if a value contains `http://` or `https://`, it MUST NOT appear in any command argument - write it to a file with `write_file` first, then reference the file.
 
+**Two ways to pass a URL - pick ONE, do not mix**:
+
+1. **`--field url=@file`** - write the URL to a plain-text file, reference it with `@`. The `@file` syntax is ONLY supported in `--field` values:
+   ```bash
+   # write_file(path='/tmp/url.txt', content='https://api.example.com/data')
+   dify-cli node add http-request --title "Fetch" -f app.yaml --field url=@/tmp/url.txt --field method=get
+   ```
+
+2. **`--fields-file` with the actual URL as a value** - write a JSON file containing the real URL string (the framework scans command args, not file contents), then pass the file path:
+   ```bash
+   # write_file(path='/tmp/fields.json', content='{"url": "https://api.example.com/data", "method": "get"}')
+   dify-cli node add http-request --title "Fetch" -f app.yaml --fields-file /tmp/fields.json
+   ```
+
+**Do NOT put `@file` references inside a `--fields-file` JSON** (e.g. `{"url": "@/tmp/url.txt"}`). The `@` prefix is a `--field` feature; in `--fields-file` the values should be the actual data. Also make sure to use the real field name (`url`, not a made-up `url_field`) - check `dify-cli schema node http-request --required-only` if unsure.
+
 **When `--field` is fine**: simple string values without shell metacharacters (`model.name=gpt-4o`, `code_language=python3`). For values with `&`, `|`, `;`, `>`, `<`, space, `=`, `"`, `'`, `\`, either single-quote on Linux/macOS or use `--fields-file` / `@file` for cross-platform safety. If a value contains a URL (`http://` or `https://`), see the [Agent-framework URL blocking](#agent-framework-url-blocking) section below - never inline it.
 
 **Passing multi-line code** (common pitfall): do NOT use `--field code="line1\nline2"` — `\n` stays as two literal characters. Either write the code to a file first and use `@file`, or pipe via stdin:
