@@ -28,16 +28,22 @@ def _find(vars_: list[dict], name: str) -> dict | None:
 @env_app.command("set")
 def env_set(
     name: str = typer.Argument(...),
-    value: str = typer.Argument(...),
+    value: str = typer.Argument(..., help="Env var value. Use @file to read from a file (for URLs blocked by agent frameworks)."),
     file: Path = typer.Option(Path("dsl.yaml"), "--file", "-f"),
 ) -> None:
-    """Set (or update) an environment variable."""
+    """Set (or update) an environment variable.
+
+    The value supports `@file` syntax (read from a file) - use this for
+    URLs, which agent frameworks block when inlined in the command line.
+    """
+    from ..core.node_builder import parse_field_value
+    resolved = parse_field_value(value)
     doc = _load(file)
     existing = _find(doc.environment_variables, name)
     if existing:
-        existing["value"] = value
+        existing["value"] = resolved
     else:
-        doc.environment_variables.append({"name": name, "value": value, "value_type": "string"})
+        doc.environment_variables.append({"name": name, "value": resolved, "value_type": "string"})
     dsl_mod.save(file, doc)
     typer.secho(f"Set env var {name!r}", fg=typer.colors.GREEN)
 

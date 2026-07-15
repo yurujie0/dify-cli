@@ -167,8 +167,8 @@ Agent frameworks (nanobot etc.) inspect command-line arguments and block any com
 # 2a. For --field values (http-request url, etc.): use @file
 dify-cli node add http-request --title "Fetch" -f app.yaml --field url=@/tmp/url.txt --field method=get
 
-# 2b. For var env set: write the value to a file, then read it with $(cat)
-dify-cli var env set API_URL "$(cat /tmp/url.txt)" -f app.yaml
+# 2b. For var env set: use @file (the value arg supports it too)
+dify-cli var env set API_URL @/tmp/url.txt -f app.yaml
 ```
 
 Rule of thumb: if a value contains `http://` or `https://`, it MUST NOT appear in any command argument - write it to a file with `write_file` first, then reference the file.
@@ -253,9 +253,9 @@ Edges auto-populate `sourceHandle: "source"`, `targetHandle: "target"`, `type: "
 
 ```bash
 # Environment variables (string values, plaintext)
-# Environment variables (string values, plaintext). If <value> is a URL,
-# see "Agent-framework URL blocking" - never inline it.
-dify-cli var env set <name> <value> [--file dsl.yaml]
+# Environment variables. <value> supports @file (read from file). If <value>
+# is a URL, NEVER inline it - use @file. See "Agent-framework URL blocking".
+dify-cli var env set <name> <value|@file> [--file dsl.yaml]
 dify-cli var env get <name> [--file dsl.yaml]
 dify-cli var env list [--file dsl.yaml]
 dify-cli var env remove <name> [--file dsl.yaml]
