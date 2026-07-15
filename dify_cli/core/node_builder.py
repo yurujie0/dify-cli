@@ -219,3 +219,67 @@ def validate_node_data(node_type: str, data: dict[str, Any], schema: dict) -> No
         e = errs[0]
         path = ".".join(str(p) for p in e.absolute_path) or None
         raise NodeValidationError(node_type, e.message, path)
+
+
+def fields_dict_to_list(fields_dict: dict[str, Any]) -> list[str]:
+    """Convert a fields dict (as used in --fields-file / apply spec) to the
+    `["k=v", ...]` list form consumed by apply_fields / build_node.
+
+    dict/list values are JSON-serialized; string values are kept as-is (so
+    `@file` references pass through to parse_field_value); other scalars
+    are stringified.
+    """
+    out: list[str] = []
+    for k, v in fields_dict.items():
+        if isinstance(v, (dict, list)):
+            out.append(f"{k}={json.dumps(v, ensure_ascii=False)}")
+        elif isinstance(v, bool):
+            out.append(f"{k}={'true' if v else 'false'}")
+        elif v is None:
+            out.append(f"{k}=null")
+        else:
+            out.append(f"{k}={v}")
+    return out
+
+
+def attach_to_parent(node: dict[str, Any], parent_id: str, parent_type: str) -> None:
+    """Mark a node as a child of an iteration/loop container so ReactFlow
+    renders it inside the container. Mirrors frontend getIterationStartNode
+    child placement.
+    """
+    node["parentId"] = parent_id
+    node["zIndex"] = 1002  # ITERATION/LOOP_CHILDREN_Z_INDEX
+    node["extent"] = "parent"
+    node["position"] = {"x": 128, "y": 68}
+    node["positionAbsolute"] = {"x": 128, "y": 68}
+    if parent_type == "iteration":
+        node["data"]["isInIteration"] = True
+        node["data"]["iteration_id"] = parent_id
+    else:
+        node["data"]["isInLoop"] = True
+        node["data"]["loop_id"] = parent_id
+
+
+def create_container_start(parent_node: dict[str, Any], parent_type: str, dsl_version: str) -> dict[str, Any]:
+    """Create the auto iteration-start / loop-start child node for a container
+    node, link parent.start_node_id, and set the parent's container zIndex.
+    Mirrors web/app/components/workflow/utils/node.ts:getIterationStartNode.
+    """
+    start_type = "iteration-start" if parent_type == "iteration" else "loop-start"
+    start_node = build_node(
+        node_type=start_type,
+        dsl_version=dsl_version,
+        title="",
+        fields=None,
+        position={"x": 24, "y": 68},
+    )
+    start_node["id"] = graph_mod.new_iteration_start_id(parent_node["id"])
+    start_node["parentId"] = parent_node["id"]
+    start_node["zIndex"] = 1002  # ITERATION/LOOP_CHILDREN_Z_INDEX
+    start_node["selectable"] = False
+    start_node["draggable"] = False
+    start_node["data"]["isInIteration"] = parent_type == "iteration"
+    start_node["data"]["isInLoop"] = parent_type == "loop"
+    parent_node["data"]["start_node_id"] = start_node["id"]
+    parent_node["zIndex"] = 1  # ITERATION/LOOP_NODE_Z_INDEX
+    return start_node

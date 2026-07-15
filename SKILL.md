@@ -92,6 +92,56 @@ To regenerate a DSL, always run `dify-cli init ... --force` directly. NEVER use 
 
 Produces a minimal DSL skeleton with empty `workflow.graph` (for workflow/advanced-chat) or empty `model_config` (for chat/completion).
 
+### `dify-cli apply` - generate a complete DSL from a spec (declarative)
+
+```bash
+dify-cli apply --spec spec.json [--file dsl.yaml] [--force]
+```
+
+Generates the ENTIRE workflow from one spec file - nodes, edges, and per-node field overrides in a single command. Re-running `apply` with an edited spec regenerates the DSL deterministically (same spec -> byte-identical output). **For complex workflows or when the design may change, prefer `apply` over issuing many `node add`/`edge add` commands** - it's one turn per revision instead of N, and there's no drift because the spec is the single source of truth.
+
+**Spec format** (JSON):
+```json
+{
+  "mode": "workflow", "name": "My App", "dsl_version": "0.5.0",
+  "nodes": [
+    {"id": "start", "type": "start", "title": "Start", "fields": {"variables": [...]}},
+    {"id": "code", "type": "code", "title": "Parse", "fields": {
+      "code_language": "python3",
+      "code": "@/tmp/parse.py",
+      "variables": [{"variable":"q","value_selector":["start","q"]}],
+      "outputs": {"items": {"type": "array[object]"}}
+    }},
+    {"id": "iter", "type": "iteration", "title": "Loop", "fields": {
+      "iterator_selector": ["code","items"],
+      "output_selector": ["inner","upper"]
+    }, "children": [
+      {"id": "inner", "type": "code", "title": "Upper", "fields": {"code": "@/tmp/upper.py", "...": "..."}}
+    ]},
+    {"id": "end", "type": "end", "title": "End", "fields": {
+      "outputs": [{"variable":"r","value_selector":["iter","output"]}]
+    }}
+  ],
+  "edges": [
+    {"source": "start", "target": "code"},
+    {"source": "code", "target": "iter"},
+    {"source": "iter", "target": "end"}
+  ]
+}
+```
+
+Key points:
+- **Stable ids**: the `id` in the spec becomes the node's id in the DSL (NOT a timestamp). Re-applying keeps ids stable so edges and `value_selector` references never break.
+- **`fields` is a dict**: values support `@file` (read from file - use for multi-line code, prompt_template, URLs), dict/list (used as-is), and scalars. Same semantics as `--fields-file`.
+- **`children`**: only for `iteration`/`loop` nodes. The iteration-start/loop-start child is auto-created and linked to `start_node_id` - do NOT list it in the spec. Children auto-get `parentId`/`isInIteration`.
+- **`edges`**: `source`/`target` reference spec ids; `src_handle` optional (for if-else branches: `"true"`/`"false"`).
+- **Idempotent**: same spec -> identical DSL every time (deterministic node ids, edge ids `<source>-<target>`, condition ids `<node>-cond-<index>`). Safe to re-apply after editing the spec.
+- **All nodes need `title`** (the schema requires it).
+
+**Three-layer separation**: the spec (`spec.json`) describes structure; `@file` files hold multi-line content (code/prompts/URLs); the generated `dsl.yaml` is derived and never hand-edited. Change the spec -> re-apply; change code -> re-apply (the `@file` is re-read).
+
+**When to use apply vs node add**: use `apply` for anything non-trivial (3+ nodes, or design may change). Use `node add`/`edge add` for quick one-off edits to an existing DSL. They coexist - `apply` generates from scratch, `node edit` mutates in place.
+
 ### `dify-cli node` — node CRUD
 
 ```bash

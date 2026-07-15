@@ -50,11 +50,8 @@ def add(
         data = _json.loads(fields_file.read_text(encoding="utf-8"))
         if not isinstance(data, dict):
             raise DifyCliError(f"--fields-file must contain a JSON object, got {type(data).__name__}")
-        for k, v in data.items():
-            if isinstance(v, (dict, list)):
-                fields.append(f"{k}={_json.dumps(v, ensure_ascii=False)}")
-            else:
-                fields.append(f"{k}={v}")
+        from ..core.node_builder import fields_dict_to_list
+        fields.extend(fields_dict_to_list(data))
 
     doc = _load(file)
     node = build_node(
@@ -72,48 +69,27 @@ def add(
         parent_type = (parent_node.get("data") or {}).get("type")
         if parent_type not in ("iteration", "loop"):
             raise DifyCliError(f"Parent {parent!r} is {parent_type!r}, not iteration/loop")
-        node["parentId"] = parent
-        node["zIndex"] = 1002  # ITERATION/LOOP_CHILDREN_Z_INDEX
-        node["extent"] = "parent"
-        # Default position inside the container: to the right of iteration-start
-        # (which sits at {24, 68}). Matches real fixture layout.
-        node["position"] = {"x": 128, "y": 68}
-        node["positionAbsolute"] = {"x": 128, "y": 68}
-        if parent_type == "iteration":
-            node["data"]["isInIteration"] = True
-            node["data"]["iteration_id"] = parent
-        else:
-            node["data"]["isInLoop"] = True
-            node["data"]["loop_id"] = parent
+        from ..core.node_builder import attach_to_parent
+        attach_to_parent(node, parent, parent_type)
 
     graph_mod.add_node(doc, node)
 
+    start_node = None
     # Iteration/loop nodes auto-create their start child node (frontend behavior).
-    # Mirrors web/app/components/workflow/utils/node.ts:getIterationStartNode.
     if node_type in ("iteration", "loop"):
-        start_type = "iteration-start" if node_type == "iteration" else "loop-start"
-        start_node = build_node(
-            node_type=start_type,
-            dsl_version=doc.version,
-            title="",
-            fields=None,
-            position={"x": 24, "y": 68},
-        )
-        start_node["id"] = graph_mod.new_iteration_start_id(node["id"])
-        start_node["parentId"] = node["id"]
-        start_node["zIndex"] = 1002  # ITERATION/LOOP_CHILDREN_Z_INDEX
-        start_node["selectable"] = False
-        start_node["draggable"] = False
-        start_node["data"]["isInIteration"] = node_type == "iteration"
-        start_node["data"]["isInLoop"] = node_type == "loop"
-        # Link parent's start_node_id
-        node["data"]["start_node_id"] = start_node["id"]
-        # Parent iteration/loop node gets zIndex 1 (ITERATION/LOOP_NODE_Z_INDEX)
-        node["zIndex"] = 1
+        from ..core.node_builder import create_container_start
+        start_node = create_container_start(node, node_type, doc.version)
         graph_mod.add_node(doc, start_node)
 
     dsl_mod.save(file, doc)
-    typer.secho(f"Added node {node['id']!r} (type={node_type})", fg=typer.colors.GREEN)
+    if node_type in ("iteration", "loop") and start_node is not None:
+        typer.secho(
+            f"Added node {node['id']!r} (type={node_type}), "
+            f"start child {start_node['id']!r} (type={start_node['data']['type']})",
+            fg=typer.colors.GREEN,
+        )
+    else:
+        typer.secho(f"Added node {node['id']!r} (type={node_type})", fg=typer.colors.GREEN)
 
 
 @app.command("list")
@@ -153,18 +129,14 @@ def edit(
     fields_file: Optional[Path] = typer.Option(None, "--fields-file", help="Read field overrides from a JSON file (object of {key: value})"),
 ) -> None:
     """Edit fields on an existing node."""
-    from ..core.node_builder import _post_process, apply_fields
+    from ..core.node_builder import _post_process, apply_fields, fields_dict_to_list
     fields = list(field)
     if fields_file is not None:
         import json as _json
         data_obj = _json.loads(fields_file.read_text(encoding="utf-8"))
         if not isinstance(data_obj, dict):
             raise DifyCliError(f"--fields-file must contain a JSON object, got {type(data_obj).__name__}")
-        for k, v in data_obj.items():
-            if isinstance(v, (dict, list)):
-                fields.append(f"{k}={_json.dumps(v, ensure_ascii=False)}")
-            else:
-                fields.append(f"{k}={v}")
+        fields.extend(fields_dict_to_list(data_obj))
     doc = _load(file)
     node = graph_mod.find_node(doc.nodes, node_id)
     if node is None:

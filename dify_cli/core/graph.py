@@ -61,6 +61,50 @@ def add_edge(doc, edge: dict[str, Any]) -> None:
     doc.edges.append(edge)
 
 
+def build_edge(
+    doc,
+    source: str,
+    target: str,
+    source_handle: str | None = None,
+    target_handle: str | None = None,
+    edge_id: str | None = None,
+) -> dict[str, Any]:
+    """Construct an edge dict matching the frontend's expected shape.
+
+    An edge is "in iteration/loop" if both endpoints share the same parentId
+    (i.e. both live inside the same container). The frontend uses this to
+    render the edge clipped to the container.
+    """
+    src_node = find_node(doc.nodes, source)
+    dst_node = find_node(doc.nodes, target)
+    src_type = (src_node.get("data") or {}).get("type", "") if src_node else ""
+    dst_type = (dst_node.get("data") or {}).get("type", "") if dst_node else ""
+    src_parent = src_node.get("parentId") if src_node else None
+    dst_parent = dst_node.get("parentId") if dst_node else None
+    shared_parent = bool(src_parent) and src_parent == dst_parent
+    parent_data = {}
+    if shared_parent:
+        parent = find_node(doc.nodes, src_parent)
+        parent_data = (parent.get("data") or {}) if parent else {}
+    in_iteration = shared_parent and parent_data.get("type") == "iteration"
+    in_loop = shared_parent and parent_data.get("type") == "loop"
+    return {
+        "id": edge_id or new_edge_id(),
+        "source": source,
+        "target": target,
+        "sourceHandle": source_handle or "source",
+        "targetHandle": target_handle or "target",
+        "type": "custom",
+        "zIndex": 1002 if (in_iteration or in_loop) else 0,
+        "data": {
+            "sourceType": src_type,
+            "targetType": dst_type,
+            "isInIteration": in_iteration,
+            "isInLoop": in_loop,
+        },
+    }
+
+
 def remove_edge(doc, edge_id: str) -> bool:
     edges = doc.edges
     before = len(edges)
