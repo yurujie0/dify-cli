@@ -173,21 +173,30 @@ dify-cli var env set API_URL @/tmp/url.txt -f app.yaml
 
 Rule of thumb: if a value contains `http://` or `https://`, it MUST NOT appear in any command argument - write it to a file with `write_file` first, then reference the file.
 
-**Two ways to pass a URL - pick ONE, do not mix**:
+**The `@file` syntax works in BOTH `--field` and `--fields-file`**. A string value starting with `@` is treated as a file path and replaced with the file's contents. This lets you keep multi-line/sensitive values (URLs, code) in separate files while the JSON stays clean.
 
-1. **`--field url=@file`** - write the URL to a plain-text file, reference it with `@`. The `@file` syntax is ONLY supported in `--field` values:
+1. **`--field url=@file`** - write the URL to a plain-text file, reference it with `@`:
    ```bash
    # write_file(path='/tmp/url.txt', content='https://api.example.com/data')
    dify-cli node add http-request --title "Fetch" -f app.yaml --field url=@/tmp/url.txt --field method=get
    ```
 
-2. **`--fields-file` with the actual URL as a value** - write a JSON file containing the real URL string (the framework scans command args, not file contents), then pass the file path:
+2. **`--fields-file` with `@file` references inside** - mix real values and file references in one JSON. Useful for nodes with many fields where code/URL go to separate files:
+   ```bash
+   # write_file(path='/tmp/mycode.py', content='def main(arg1):\n    return {"greeting": "hi " + arg1}\n')
+   # write_file(path='/tmp/url.txt', content='https://api.example.com/data')
+   # write_file(path='/tmp/fields.json', content='{"code_language": "python3", "code": "@/tmp/mycode.py", "url": "@/tmp/url.txt", "method": "get"}')
+   dify-cli node add code --title "Run Code" -f app.yaml --fields-file /tmp/fields.json
+   ```
+   In this example `code` and `url` are read from their files; `code_language` and `method` are used as-is.
+
+3. **`--fields-file` with the actual URL/code as a value** - alternatively, put the real string directly in the JSON (the framework scans command args, not file contents):
    ```bash
    # write_file(path='/tmp/fields.json', content='{"url": "https://api.example.com/data", "method": "get"}')
    dify-cli node add http-request --title "Fetch" -f app.yaml --fields-file /tmp/fields.json
    ```
 
-**Do NOT put `@file` references inside a `--fields-file` JSON** (e.g. `{"url": "@/tmp/url.txt"}`). The `@` prefix is a `--field` feature; in `--fields-file` the values should be the actual data. Also make sure to use the real field name (`url`, not a made-up `url_field`) - check `dify-cli schema node http-request --required-only` if unsure.
+**Use the real field name** (`url`, `code`, not made-up names like `url_field`/`code_field`) - check `dify-cli schema node <type> --required-only` if unsure. A value starting with `@` is always treated as a file path; if you need a literal value starting with `@`, escape it by writing it to a file and referencing that file.
 
 **When `--field` is fine**: simple string values without shell metacharacters (`model.name=gpt-4o`, `code_language=python3`). For values with `&`, `|`, `;`, `>`, `<`, space, `=`, `"`, `'`, `\`, either single-quote on Linux/macOS or use `--fields-file` / `@file` for cross-platform safety. If a value contains a URL (`http://` or `https://`), see the [Agent-framework URL blocking](#agent-framework-url-blocking) section below - never inline it.
 
