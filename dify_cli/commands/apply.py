@@ -77,6 +77,7 @@ def apply(
 
     _build_nodes(doc, spec_data.get("nodes", []), dsl_version)
     _build_edges(doc, spec_data.get("edges", []))
+    _connect_container_starts(doc)
     _make_condition_ids_deterministic(doc)
 
     dsl_mod.save(file, doc)
@@ -120,6 +121,8 @@ def _build_nodes(doc, nodes: list, dsl_version: str) -> None:
                 cnode["id"] = child["id"]
                 attach_to_parent(cnode, node["id"], n["type"])
                 graph_mod.add_node(doc, cnode)
+            # Subgraph entry edges (start -> in-degree-0 children) are wired
+            # after all spec edges are built, in _connect_container_starts.
 
 
 def _build_edges(doc, edges: list) -> None:
@@ -160,3 +163,39 @@ def _make_condition_ids_deterministic(doc) -> None:
         for bc in data.get("break_conditions") or []:
             bc["id"] = f"{nid}-cond-{idx}"
             idx += 1
+
+
+def _connect_container_starts(doc) -> None:
+    """Wire each iteration/loop start node to its in-degree-0 children.
+
+    A child with no incoming spec edge is a subgraph entry point and must be
+    connected to the auto-created start node. Handles parallel entry points
+    (multiple in-degree-0 children) and chained children (only the first has
+    in-degree 0). Children already targeted by a spec edge are reached via
+    that edge and are left alone.
+    """
+    # Collect all edge targets once.
+    targeted = {e.get("target") for e in doc.edges}
+    for node in doc.nodes:
+        data = node.get("data") or {}
+        if data.get("type") not in ("iteration", "loop"):
+            continue
+        start_id = data.get("start_node_id")
+        if not start_id:
+            continue
+        # Children = nodes whose parentId is this container, excluding the
+        # start node itself.
+        parent_id = node["id"]
+        entry_children = [
+            n["id"] for n in doc.nodes
+            if n.get("parentId") == parent_id
+            and n["id"] != start_id
+            and (n.get("data") or {}).get("type") not in ("iteration-start", "loop-start")
+            and n["id"] not in targeted
+        ]
+        for child_id in entry_children:
+            edge = graph_mod.build_edge(
+                doc, start_id, child_id,
+                edge_id=f"{start_id}-{child_id}",
+            )
+            graph_mod.add_edge(doc, edge)
