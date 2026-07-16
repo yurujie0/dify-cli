@@ -21,7 +21,8 @@ def _load(file: Path):
     return doc
 
 
-@app.command("add")
+# Deprecated: declare nodes in the spec and use `dify-cli apply`.
+# @app.command("add")
 def add(
     node_type: str = typer.Argument(..., help="Node type, e.g. llm / start / end / http-request"),
     file: Path = typer.Option(Path("dsl.yaml"), "--file", "-f"),
@@ -121,7 +122,8 @@ def show(
     typer.echo(_json.dumps(node, indent=2, ensure_ascii=False))
 
 
-@app.command("remove")
+# Deprecated: declare nodes in the spec and use `dify-cli apply`.
+# @app.command("remove")
 def remove(
     node_id: str = typer.Argument(...),
     file: Path = typer.Option(Path("dsl.yaml"), "--file", "-f"),

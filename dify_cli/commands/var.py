@@ -25,7 +25,8 @@ def _find(vars_: list[dict], name: str) -> dict | None:
     return next((v for v in vars_ if v.get("name") == name), None)
 
 
-@env_app.command("set")
+# Deprecated: declare environment_variables in the spec and use `dify-cli apply`.
+# @env_app.command("set")
 def env_set(
     name: str = typer.Argument(...),
     value: str = typer.Argument(..., help="Env var value. Use @file to read from a file (for URLs blocked by agent frameworks)."),
@@ -73,7 +74,8 @@ def env_list(
         typer.echo(f"{v.get('name', ''):<24} {v.get('value_type', ''):<10} {v.get('value', '')}")
 
 
-@env_app.command("remove")
+# Deprecated: declare environment_variables in the spec and use `dify-cli apply`.
+# @env_app.command("remove")
 def env_remove(
     name: str = typer.Argument(...),
     file: Path = typer.Option(Path("dsl.yaml"), "--file", "-f"),
@@ -87,7 +89,8 @@ def env_remove(
     typer.secho(f"Removed env var {name!r}", fg=typer.colors.GREEN)
 
 
-@conv_app.command("set")
+# Deprecated: declare conversation_variables in the spec and use `dify-cli apply`.
+# @conv_app.command("set")
 def conv_set(
     name: str = typer.Argument(...),
     value_type: str = typer.Option("string", "--type", help="Value type: string|number|object|array[string]..."),
@@ -121,7 +124,8 @@ def conv_list(
         typer.echo(f"{v.get('name', ''):<24} {v.get('value_type', '')}")
 
 
-@conv_app.command("remove")
+# Deprecated: declare conversation_variables in the spec and use `dify-cli apply`.
+# @conv_app.command("remove")
 def conv_remove(
     name: str = typer.Argument(...),
     file: Path = typer.Option(Path("dsl.yaml"), "--file", "-f"),

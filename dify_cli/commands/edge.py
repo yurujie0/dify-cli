@@ -19,7 +19,8 @@ def _load(file: Path):
     return doc
 
 
-@app.command("add")
+# Deprecated: declare edges in the spec and use `dify-cli apply`.
+# @app.command("add")
 def add(
     source: str = typer.Argument(..., help="Source node id"),
     target: str = typer.Argument(..., help="Target node id"),
@@ -57,7 +58,8 @@ def list_(
         typer.echo(f"{e.get('id', ''):<24} {e.get('source', ''):<24} {e.get('target', '')}")
 
 
-@app.command("remove")
+# Deprecated: declare edges in the spec and use `dify-cli apply`.
+# @app.command("remove")
 def remove(
     edge_id: str = typer.Argument(...),
     file: Path = typer.Option(Path("dsl.yaml"), "--file", "-f"),

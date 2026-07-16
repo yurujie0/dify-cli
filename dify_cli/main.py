@@ -27,7 +27,9 @@ def _main(
         raise typer.Exit()
 
 
-app.command(name="init")(init.init)
+# Deprecated: use `dify-cli apply --spec` instead. init only scaffolds an
+# empty graph; apply generates the full workflow from a spec.
+# app.command(name="init")(init.init)
 app.command(name="apply")(apply.apply)
 app.command(name="validate")(validate.validate)
 app.command(name="version")(version.version)

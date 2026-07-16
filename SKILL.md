@@ -40,7 +40,7 @@ dify-cli node types       # lists all node types in the latest bundled schema (2
 dify-cli node types -v 0.5.0   # list types for a specific DSL version
 ```
 
-`dify-cli node types` does NOT require a DSL file — it reads from the bundled schema. Use it to discover what node types are available before `dify-cli init`.
+`dify-cli node types` does NOT require a DSL file — it reads from the bundled schema. Use it to discover what node types are available before writing a spec.
 
 ## Installation
 
@@ -80,22 +80,6 @@ Each node built by this CLI is constructed in **three layers**, from bottom to t
 Node graph structure (top-level `type`, `positionAbsolute`, `width`, `height`, `sourcePosition`, `targetPosition`, edge `data.{sourceType,targetType,isInIteration,isInLoop}`, `zIndex`) matches what the frontend expects on import — this is non-negotiable for avoiding "client-side exception" errors.
 
 ## Command reference
-
-### `dify-cli init` — scaffold a new DSL file
-
-```bash
-dify-cli init --mode <mode> --name <name> [--output dsl.yaml] [--dsl-version 0.5.0] [--description "..."] [--force]
-```
-
-- `--mode`: one of `workflow`, `advanced-chat`, `chat`, `completion`, `agent-chat`
-- `--name`: app name
-- `--output` / `-o`: output file path (default `dsl.yaml`)
-- `--dsl-version`: must match a bundled schema version (default `0.5.0`)
-- `--force`: overwrite existing file
-
-To regenerate a DSL, always run `dify-cli init ... --force` directly. NEVER use `rm`/`rm -rf`/`rm -r` to delete the old file first - those commands are blocked by agent safety guardrails. `--force` overwrites in place safely.
-
-Produces a minimal DSL skeleton with empty `workflow.graph` (for workflow/advanced-chat) or empty `model_config` (for chat/completion).
 
 ### `dify-cli apply` - generate a complete DSL from a spec (declarative)
 
@@ -181,188 +165,57 @@ FAIL end.fields.outputs[0].value_selector: cannot reference 'loopbody' from here
 
 When the validator says a node "does not expose" a variable, check what it actually exposes - for start/code/parameter-extractor that's their declared variables/outputs/parameters; for containers use the container's special vars (`item`/`index`/`output`/`loop_variables`).
 
-### `dify-cli node` — node CRUD
+### `dify-cli node` - inspect nodes (read-only)
 
 ```bash
-# Add a node — most common command
-# IMPORTANT: there is NO --id option. Node ids are auto-generated as
-# millisecond timestamps (matching the Dify frontend). Do NOT pass --id.
-# IMPORTANT: if any --field value contains a URL, see "Agent-framework URL
-# blocking" below - never inline it. Apply to: node add --field, var env set, etc.
-dify-cli node add <node_type> [--title T] [--parent <iter-or-loop-id>] [--field key=value]... [--file dsl.yaml]
-
-# List all nodes
+# List all nodes (id, type, title)
 dify-cli node list [--file dsl.yaml]
 
 # Show one node's full JSON
 dify-cli node show <node_id> [--file dsl.yaml]
 
-# Edit fields on an existing node (deep-merged over existing data)
-dify-cli node edit <node_id> --field key=value [--field ...] [--file dsl.yaml]
-
-# Remove a node and its connected edges
-dify-cli node remove <node_id> [--file dsl.yaml]
-
 # List node types known to the bundled schema
 dify-cli node types [--file dsl.yaml]
 ```
 
-**`--field` syntax** (critical):
+`node add`/`node remove`/`node edit` are removed - declare nodes in the spec and use `dify-cli apply`.
 
-- Format: `key=value`. Key supports **dotted paths** for nested assignment: `model.name=gpt-4o` sets `data.model.name`.
-- Value parsing (in order):
-  1. **`@filename`** → reads value from a file (use for multi-line content like code blocks): `--field code=@mycode.py`
-  2. **`@-`** → reads value from stdin (use with heredoc): `--field code=@- <<'PY' ... PY`
-  3. Starts with `{` or `[` → parsed as JSON: `--field 'context={"enabled": false}'`, `--field 'prompt_template=[{"role":"user","text":"hi"}]'`
-  4. Otherwise → plain string: `--field model.provider=openai`
-- Repeat `--field` for multiple fields.
+## Spec field values and @file
 
-**Passing JSON values (arrays/objects) - use `--fields-file` to avoid shell quoting issues**:
+Spec field values can be inline strings, numbers, booleans, arrays, or objects. For multi-line content (code, prompt_template) or sensitive values (URLs), use `@file` - a string starting with `@` is replaced with the file's contents:
 
-Shell quoting is NOT portable across Linux/macOS (bash) and Windows (cmd/PowerShell). A command like `--field 'iterator_selector=["123","batches"]'` works on Linux but on Windows the double quotes get stripped by the shell, arriving as `iterator_selector=[{123,batches}]` which fails JSON parsing. Agents then retry-loop.
-
-**For any field whose value is JSON (starts with `{` or `[`), prefer `--fields-file`** over `--field`. Write the fields to a JSON file and pass the path - no shell quoting involved, identical behavior on every platform:
-
-```bash
-cat > /tmp/fields.json <<'EOF'
-{
-  "iterator_selector": ["1783404896636", "batches"],
-  "output_selector": ["inner-code-id", "upper"]
-}
-EOF
-dify-cli node add iteration --title "Loop" -f app.yaml --fields-file /tmp/fields.json
+```json
+{"id": "code", "type": "code", "fields": {
+  "code": "@/tmp/parse.py",
+  "prompt_template": "@/tmp/prompt.json"
+}}
 ```
 
-The JSON object's keys support dotted paths; values can be strings, numbers, booleans, arrays, or objects (auto-serialized to JSON). `node edit` also supports `--fields-file`.
+This keeps the spec clean and lets you edit code/prompts independently. Use the `write_file` tool to create these files.
 
-## Agent-framework URL blocking
+## Agent-framework URL blocking (mostly N/A in declarative workflow)
 
-Agent frameworks (nanobot etc.) inspect command-line arguments and block any command containing a URL matching `https?://` - the command never reaches dify-cli. This applies to **every** dify-cli command where a URL could appear, not just http-request nodes:
+Agent frameworks (nanobot) block commands whose arguments contain `https://` or `http://`. In the declarative workflow this is rarely an issue: URLs live inside the spec file (written via `write_file`), and `dify-cli apply --spec spec.json` only puts the file path on the command line - no URL in the args. So **just put URLs directly in the spec** (or in an `@file` referenced by the spec); do not pass them as command arguments.
 
-- `dify-cli node add http-request --field url=https://...` (http-request url field)
-- `dify-cli var env set API_URL https://...` (environment variable values)
-- `dify-cli node add <type> --field <any-field>=https://...` (e.g. tool provider URLs, webhook URLs)
-- Any other command with a URL in its arguments
+The only remaining guardrail: never inline a URL in a command argument (e.g. `dify-cli var env get 'https://...'` - there's no reason to do this). If you ever need a URL on the command line, write it to a file first with `write_file` and reference the file.
 
-**The blocking also covers the exec tool**: writing a URL to a file via `echo`/`printf`/shell redirection (which run through exec) is blocked too, because the URL appears in the exec command line.
-
-**Universal workaround - use the `write_file` tool, then reference the file**:
+### `dify-cli edge` - inspect edges (read-only)
 
 ```bash
-# 1. Write the URL to a file using the write_file tool (NOT exec/echo/printf -
-#    write_file is not subject to the URL pattern scan)
-#    write_file(path='/tmp/url.txt', content='https://api.example.com/data?id=1&format=json')
-
-# 2a. For --field values (http-request url, etc.): use @file
-dify-cli node add http-request --title "Fetch" -f app.yaml --field url=@/tmp/url.txt --field method=get
-
-# 2b. For var env set: use @file (the value arg supports it too)
-dify-cli var env set API_URL @/tmp/url.txt -f app.yaml
-```
-
-Rule of thumb: if a value contains `http://` or `https://`, it MUST NOT appear in any command argument - write it to a file with `write_file` first, then reference the file.
-
-**The `@file` syntax works in BOTH `--field` and `--fields-file`**. A string value starting with `@` is treated as a file path and replaced with the file's contents. This lets you keep multi-line/sensitive values (URLs, code) in separate files while the JSON stays clean.
-
-1. **`--field url=@file`** - write the URL to a plain-text file, reference it with `@`:
-   ```bash
-   # write_file(path='/tmp/url.txt', content='https://api.example.com/data')
-   dify-cli node add http-request --title "Fetch" -f app.yaml --field url=@/tmp/url.txt --field method=get
-   ```
-
-2. **`--fields-file` with `@file` references inside** - mix real values and file references in one JSON. Useful for nodes with many fields where code/URL go to separate files:
-   ```bash
-   # write_file(path='/tmp/mycode.py', content='def main(arg1):\n    return {"greeting": "hi " + arg1}\n')
-   # write_file(path='/tmp/url.txt', content='https://api.example.com/data')
-   # write_file(path='/tmp/fields.json', content='{"code_language": "python3", "code": "@/tmp/mycode.py", "url": "@/tmp/url.txt", "method": "get"}')
-   dify-cli node add code --title "Run Code" -f app.yaml --fields-file /tmp/fields.json
-   ```
-   In this example `code` and `url` are read from their files; `code_language` and `method` are used as-is.
-
-3. **`--fields-file` with the actual URL/code as a value** - alternatively, put the real string directly in the JSON (the framework scans command args, not file contents):
-   ```bash
-   # write_file(path='/tmp/fields.json', content='{"url": "https://api.example.com/data", "method": "get"}')
-   dify-cli node add http-request --title "Fetch" -f app.yaml --fields-file /tmp/fields.json
-   ```
-
-**Use the real field name** (`url`, `code`, not made-up names like `url_field`/`code_field`) - check `dify-cli schema node <type> --required-only` if unsure. A value starting with `@` is always treated as a file path; if you need a literal value starting with `@`, escape it by writing it to a file and referencing that file.
-
-**When `--field` is fine**: simple string values without shell metacharacters (`model.name=gpt-4o`, `code_language=python3`). For values with `&`, `|`, `;`, `>`, `<`, space, `=`, `"`, `'`, `\`, either single-quote on Linux/macOS or use `--fields-file` / `@file` for cross-platform safety. If a value contains a URL (`http://` or `https://`), see the [Agent-framework URL blocking](#agent-framework-url-blocking) section below - never inline it.
-
-**Passing multi-line code** (common pitfall): do NOT use `--field code="line1\nline2"` — `\n` stays as two literal characters. Either write the code to a file first and use `@file`, or pipe via stdin:
-
-```bash
-# Recommended: write code to a file, reference it
-cat > mycode.py <<'PY'
-import json
-result = {"answer": "hello " + arg1}
-PY
-dify-cli node add code --title "Run Code" \
-  --field code=@mycode.py \
-  --field 'variables=[{"variable":"arg1","value_selector":["<start-node-id>","input"]}]' \
-  --field 'outputs={"answer":{"type":"string"}}'
-```
-
-Replace `<start-node-id>` with the actual id from `dify-cli node list`.
-
-Node IDs are auto-generated as millisecond timestamps (e.g. `1783395438602`), matching the Dify frontend's `Date.now()` algorithm. Adding an `iteration` or `loop` node also auto-creates its start child node with id `<parent_id>start` and links the parent's `start_node_id`. To reference node ids (e.g. for edges or `value_selector`), run `dify-cli node list` after adding.
-
-**Placing nodes inside iteration/loop containers**: use `--parent <iter-or-loop-id>` when adding a node that should live inside a container. This sets `parentId`, `extent: "parent"`, `zIndex: 1002`, and `data.isInIteration`/`iteration_id` (or `isInLoop`/`loop_id`) so ReactFlow renders the node inside the container:
-
-```bash
-# Adding an iteration auto-creates its start child node. The command output
-# prints BOTH ids - capture the iteration id for --parent and edges:
-#   Added node '1783590595490' (type=iteration), start child '1783590595490start' (type=iteration-start)
-dify-cli node add iteration --title "Loop" -f app.yaml
-ITER_ID=$(dify-cli node list -f app.yaml | awk '$2=="iteration"{print $1; exit}')
-ITER_START_ID="${ITER_ID}start"   # = <iteration_id>start, for the subgraph entry edge
-dify-cli node add code --title "Inner" --parent "$ITER_ID" -f app.yaml \
-  --field "variables=[{\"variable\":\"item\",\"value_selector\":[\"$ITER_ID\",\"item\"]}]"
-# Connect iter-start -> Inner as the subgraph entry edge:
-dify-cli edge add "$ITER_START_ID" "$INNER_ID" -f app.yaml
-```
-
-The iteration-start id is deterministic: `<iteration_id>start`. Do NOT add iteration-start separately or pass its id - it's auto-created and auto-linked to `start_node_id`.
-
-**Iteration variable references**: inside an iteration, the current element is exposed as `<iteration_id>.item` and the index as `<iteration_id>.index` — NOT `<iter-start-id>.output`. The iteration-start node is just a subgraph entry marker; the iteration node itself injects `item`/`index` into the variable pool each loop. Connect `iter-start → <first-inner-node>` as the subgraph entry edge, and the iteration node's `output_selector` points to the inner node's output that gets collected into the iteration's `output` array.
-
-**Iteration edges**: the inner subgraph nodes should NOT connect directly to external nodes (e.g. End). The iteration node's `output_selector` aggregates inner outputs, and the iteration node itself connects to the next external node. Typical edge pattern:
-- `<prev> → <iteration>` (enter iteration)
-- `<iter-start> → <first-inner>` (subgraph entry)
-- `<inner> → <inner>` (subgraph internal)
-- `<iteration> → <next>` (exit iteration, carrying aggregated `output`)
-
-### `dify-cli edge` — edge CRUD
-
-```bash
-# Add an edge between two nodes
-dify-cli edge add <source_node_id> <target_node_id> [--src-handle H] [--dst-handle H] [--id ID] [--file dsl.yaml]
-
-# List edges
 dify-cli edge list [--file dsl.yaml]
-
-# Remove an edge by id
-dify-cli edge remove <edge_id> [--file dsl.yaml]
 ```
 
-Edges auto-populate `sourceHandle: "source"`, `targetHandle: "target"`, `type: "custom"`, `zIndex: 0`, and `data: {sourceType, targetType, isInIteration: false, isInLoop: false}` (resolved from the source/target nodes). Override handles only for branch nodes (if-else, question-classifier) where edges connect to specific case outputs.
+`edge add`/`edge remove` are removed - declare edges in the spec and use `dify-cli apply`.
 
-### `dify-cli var` — variable management
+### `dify-cli var` - inspect variables (read-only)
 
 ```bash
-# Environment variables (string values, plaintext)
-# Environment variables. <value> supports @file (read from file). If <value>
-# is a URL, NEVER inline it - use @file. See "Agent-framework URL blocking".
-dify-cli var env set <name> <value|@file> [--file dsl.yaml]
-dify-cli var env get <name> [--file dsl.yaml]
 dify-cli var env list [--file dsl.yaml]
-dify-cli var env remove <name> [--file dsl.yaml]
-
-# Conversation variables (typed, for advanced-chat/workflow)
-dify-cli var conversation set <name> [--type string|number|object|array[string]...] [--description "..."] [--file dsl.yaml]
+dify-cli var env get <name> [--file dsl.yaml]
 dify-cli var conversation list [--file dsl.yaml]
-dify-cli var conversation remove <name> [--file dsl.yaml]
 ```
+
+`var ... set/remove` are removed - declare environment/conversation variables in the spec and use `dify-cli apply`.
 
 ### `dify-cli validate` — full validation
 
@@ -413,24 +266,24 @@ These are the most-used node types (full list via `dify-cli node types`):
 | Agent | `agent` | `model`, `strategy`, `tools` |
 | Answer | `answer` | `answer` (template string) |
 
-### LLM prompt_template - prefer `--fields-file`
+### LLM prompt_template in the spec
 
-The LLM node's `prompt_template` is a JSON array of message objects, often containing multi-line prompts, embedded quotes, and `{{#node-id.var#}}` template variables. Passing it inline via `--field` is error-prone (shell quoting, JSON escaping). **Prefer `--fields-file`** to configure `prompt_template`:
+The LLM node's `prompt_template` is a JSON array of message objects, often containing multi-line prompts, embedded quotes, and `{{#node-id.var#}}` template variables. In the spec it's just a normal JSON value - no shell quoting issues. Put it directly in the spec:
 
-```bash
-cat > /tmp/llm_fields.json <<'EOF'
-{
+```json
+{"id": "llm", "type": "llm", "title": "GPT", "fields": {
   "model": {"provider": "openai", "name": "gpt-4o"},
   "prompt_template": [
-    {"role": "system", "text": "You are a helpful assistant. Follow these rules:\n1. Be concise\n2. Use {{#start-1.input#}} as context"},
+    {"role": "system", "text": "You are a helpful assistant. Follow these rules:\n1. Be concise\n2. Use {{#start.input#}} as context"},
     {"role": "user", "text": "Summarize the above."}
   ]
-}
-EOF
-dify-cli node add llm --title "Call GPT" -f app.yaml --fields-file /tmp/llm_fields.json
+}}
 ```
 
-If you only need a simple single-turn prompt, inline `--field` works too (on Linux/macOS with single quotes), but `--fields-file` is the cross-platform default for prompt_template.
+For very long prompts, write the prompt text to a file and reference it with `@file`:
+```json
+{"role": "system", "text": "@/tmp/system_prompt.txt"}
+```
 
 ## How to look up node field requirements
 
@@ -454,155 +307,149 @@ These commands work on any installed dify-cli (no source access needed). The got
 
 ## Node field gotchas
 
-These fields have shapes that are easy to get wrong. When a node fails validation, run `dify-cli node show <id>` to inspect, or check the schema directly (see above).
+These field shapes are easy to get wrong. All examples show the spec `fields` value for the node. When a node fails validation, run `dify-cli node show <id>` on the generated DSL, or `dify-cli schema node <type>` for the authoritative shape.
 
-**start `variables[]`** items require `variable`, `label`, and `type` (all required). `type` is one of: `text-input`, `paragraph`, `number`, `select`, `file`, `file-list`, `json_object`. For `select`, add `options: [...]`. Example:
-
-```bash
-dify-cli node add start --title "Start" -f app.yaml --fields-file /tmp/start.json
-# /tmp/start.json:
-# {
-#   "variables": [
-#     {"variable": "name", "label": "Name", "type": "text-input", "required": true},
-#     {"variable": "age", "label": "Age", "type": "number", "required": false},
-#     {"variable": "role", "label": "Role", "type": "select", "options": ["admin","user"], "required": true}
-#   ]
-# }
+**start `variables[]`** items require `variable`, `label`, and `type`. `type` is one of: `text-input`, `paragraph`, `number`, `select`, `file`, `file-list`, `json_object`. For `select`, add `options`:
+```json
+"fields": {"variables": [
+  {"variable": "name", "label": "Name", "type": "text-input", "required": true},
+  {"variable": "role", "label": "Role", "type": "select", "options": ["admin","user"], "required": true}
+]}
 ```
 
-**if-else `cases[].conditions[]`** uses `variable_selector` (array of node-id path segments), NOT `variable`. The `value` field accepts only string / array[string] / boolean / null — **not number**. To compare against a number, convert to string or use an operator like `not empty`:
-
-```bash
-# CORRECT: string value
---field 'cases=[{"case_id":"true","logical_operator":"and","conditions":[{"variable_selector":["start-1","input"],"comparison_operator":"contains","value":"hello"}]}]'
-# CORRECT: empty check (no value needed)
---field 'cases=[{"case_id":"true","logical_operator":"and","conditions":[{"variable_selector":["code-1","keywords"],"comparison_operator":"not empty","value":null}]}]'
-# WRONG (will fail validation): variable instead of variable_selector
-# WRONG: numeric value (value: 0) — use a string operator instead
+**if-else `cases[].conditions[]`** uses `variable_selector` (NOT `variable`). `value` accepts only string / array[string] / boolean / null - **not number** (use a string operator like `not empty` for numeric checks):
+```json
+"fields": {"cases": [{"case_id": "true", "logical_operator": "and", "conditions": [
+  {"variable_selector": ["start", "input"], "comparison_operator": "contains", "value": "hello"}
+]}]}
 ```
 
-**http-request `url`** - any URL (private OR public) inlined in a command is blocked by agent frameworks. See [Agent-framework URL blocking](#agent-framework-url-blocking) for the universal `write_file` + `@file` workaround. The same applies to `headers` with Bearer tokens pointing to internal auth.
-
-**http-request `headers` / `params`** are **strings** (one `key: value` per line), not objects or arrays:
-
-```bash
-# CORRECT
---field 'headers=Content-Type: application/json
-Authorization: Bearer xxx'
-# WRONG (will fail validation): object or array
---field 'headers={"Content-Type":"application/json"}'
+**http-request `headers` / `params`** are **strings** (one `key: value` per line), not objects:
+```json
+"fields": {"headers": "Content-Type: application/json\nAuthorization: Bearer xxx"}
 ```
 
 **http-request `body`** is an object with `type` (`none`/`form-data`/`x-www-form-urlencoded`/`raw-text`/`json`/`binary`) and `data`:
-
-```bash
---field 'body={"type":"json","data":[{"key":"","type":"text","value":"{\"key\":\"val\"}"}]}'
+```json
+"fields": {"body": {"type": "json", "data": [{"key": "", "type": "text", "value": "{\"k\":\"v\"}"}]}}
 ```
 
-**end `outputs[]`** items use `variable` (the output name) + `value_selector` (array path to the upstream node's output):
-
-```bash
---field 'outputs=[{"variable":"result","value_selector":["llm-1","text"]}]'
+**end `outputs[]`** items use `variable` (output name) + `value_selector` (path to upstream output):
+```json
+"fields": {"outputs": [{"variable": "result", "value_selector": ["llm", "text"]}]}
 ```
 
 **variable-aggregator `variables`** is an array of arrays (each inner array is a value selector):
-
-```bash
---field 'variables=[["node-1","output"],["node-2","output"]]'
+```json
+"fields": {"variables": [["node1", "output"], ["node2", "output"]], "output_type": "string"}
 ```
 
-**Comparison operators** for if-else/code conditions include string forms like `contains`, `is`, `empty`, `not empty`, plus symbol forms `=`, `≠`, `>`, `<`. Check the schema enum for the full list.
-
-**code node `variables[]`** items are `{variable: <name>, value_selector: [<node-id>, <output>]}` — the `variable` is the Python function parameter name, `value_selector` is the path to the upstream output:
-
-```bash
---field 'variables=[{"variable":"name","value_selector":["start-1","name"]},{"variable":"count","value_selector":["start-1","count"]}]'
+**code `variables[]`** items are `{variable, value_selector}` - `variable` is the Python parameter name, `value_selector` is the path to the upstream output:
+```json
+"fields": {"variables": [{"variable": "name", "value_selector": ["start", "name"]}]}
 ```
 
-**code node `outputs`** is an object mapping output name → `{type: <SegmentType>}`. SegmentType values include `string`, `number`, `object`, `array[string]`, `array[object]`, `array[number]`, `boolean`, `file`, `array[file]`, `secret`, `none`:
-
-```bash
---field 'outputs={"items":{"type":"array[object]"},"summary":{"type":"object"},"count":{"type":"number"}}'
+**code `outputs`** is an object mapping output name -> `{type: <SegmentType>}`. SegmentType: `string`, `number`, `object`, `array[string]`, `array[object]`, `array[number]`, `boolean`, `file`, `array[file]`, `secret`, `none`:
+```json
+"fields": {"outputs": {"items": {"type": "array[object]"}, "count": {"type": "number"}}}
 ```
 
-**code node `code_language`** accepts only `python3` or `javascript` — NOT `python` (the schema enum rejects it). The CLI auto-corrects `python`→`python3` and `js`→`javascript`, but write the correct value explicitly when possible.
+**code `code_language`** accepts only `python3` or `javascript` (NOT `python`; the CLI auto-corrects `python`->`python3`).
 
-**iteration node** requires `iterator_selector` (the array to loop over), `output_selector` (path to the output collected from each iteration), and `start_node_id` (the iteration-start node id). The iteration-start node is a separate node of type `iteration-start` that lives inside the iteration subgraph:
-
-```bash
-# Adding an iteration node auto-creates its iteration-start child node
-# (id = <iteration_id>start) and links start_node_id. Do NOT add the
-# start node separately or pass --id / start_node_id manually.
-dify-cli node add iteration --title "Loop" -f app.yaml \
-  --field 'iterator_selector=["<code-node-id>","items"]' \
-  --field 'output_selector=["<inner-node-id>","result"]'
-# To look up the auto-generated iteration id and start id:
-ITER_ID=$(dify-cli node list -f app.yaml | awk '$2=="iteration"{print $1; exit}')
-# Inner nodes use --parent and reference [<ITER_ID>,"item"] (see above)
+**iteration** requires `iterator_selector` (array to loop over) and `output_selector` (path to the inner node's output to collect). The iteration-start child is auto-created by `apply` - do NOT list it in the spec. Inner nodes go in `children` and reference `[<iteration_id>, "item"]`:
+```json
+{"id": "iter", "type": "iteration", "fields": {
+  "iterator_selector": ["code", "items"],
+  "output_selector": ["inner", "result"]
+}, "children": [
+  {"id": "inner", "type": "code", "fields": {
+    "variables": [{"variable": "item", "value_selector": ["iter", "item"]}]
+  }}
+]}
 ```
 
+**loop** exposes its `loop_variables` (by `label`) to both inner children and outside nodes. break_conditions reference the loop's own variables, NOT child outputs:
+```json
+{"id": "loop", "type": "loop", "fields": {
+  "loop_variables": [{"label": "counter", "var_type": "number", "value": "0", "value_type": "constant"}],
+  "break_conditions": [{"variable_selector": ["loop", "counter"], "comparison_operator": "\u2265", "value": "5"}]
+}}
+```
 
+**Comparison operators**: `contains`, `is`, `empty`, `not empty`, `=`, `\u2260` (\u2260), `>`, `<`, `\u2265`, `\u2264`. Check `dify-cli schema enum if-else comparison_operator` for the full list.
 
-### Minimal LLM workflow
+### Minimal LLM workflow (spec + apply)
+
+Write a spec, validate, apply:
+
+```json
+// spec.json
+{
+  "mode": "workflow", "name": "My App",
+  "nodes": [
+    {"id": "start", "type": "start", "title": "Start"},
+    {"id": "llm", "type": "llm", "title": "Call GPT", "fields": {
+      "model": {"provider": "openai", "name": "gpt-4o"}
+    }},
+    {"id": "end", "type": "end", "title": "End", "fields": {
+      "outputs": [{"variable": "result", "value_selector": ["llm", "text"]}]
+    }}
+  ],
+  "edges": [
+    {"source": "start", "target": "llm"},
+    {"source": "llm", "target": "end"}
+  ]
+}
+```
 
 ```bash
-dify-cli init --mode workflow --name "My App" -o app.yaml --force
-dify-cli node add start --title "Start" -f app.yaml
-START_ID=$(dify-cli node list -f app.yaml | awk '$2=="start"{print $1; exit}')
-dify-cli node add llm --title "Call GPT" \
-  --field model.provider=openai \
-  --field model.name=gpt-4o \
-  -f app.yaml
-LLM_ID=$(dify-cli node list -f app.yaml | awk '$2=="llm"{print $1; exit}')
-dify-cli node add end --title "End" \
-  --field "outputs=[{\"variable\":\"result\",\"value_selector\":[\"$LLM_ID\",\"text\"]}]" \
-  -f app.yaml
-END_ID=$(dify-cli node list -f app.yaml | awk '$2=="end"{print $1; exit}')
-dify-cli edge add "$START_ID" "$LLM_ID" -f app.yaml
-dify-cli edge add "$LLM_ID" "$END_ID" -f app.yaml
+dify-cli spec validate --spec spec.json
+dify-cli apply --spec spec.json -f app.yaml --force
 dify-cli validate app.yaml
 ```
 
-Note: the LLM node only needs `model.provider` and `model.name` — `mode`, `completion_params.temperature`, `prompt_template`, `context`, `vision` all come from the frontend defaults template. Node ids are millisecond timestamps (matching the Dify frontend); use `node list` to look them up for edges and `value_selector`.
+The LLM node only needs `model.provider` and `model.name` - `mode`, `completion_params.temperature`, `prompt_template`, `context`, `vision` come from the frontend defaults. Stable ids (`start`/`llm`/`end`) let edges and `value_selector` reference nodes by name.
 
-### Editing an existing node
+### Changing the workflow
 
-```bash
-# Look up the node id from `node list`
-LLM_ID=$(dify-cli node list -f app.yaml | awk '$2=="llm"{print $1; exit}')
+Edit `spec.json` (add/remove nodes, change fields, update edges) and re-run `spec validate` + `apply`. The spec is the single source of truth - never hand-edit `app.yaml`. Example: change the model and add a system prompt by editing the llm node in the spec:
 
-# Change the model on the LLM node
-dify-cli node edit "$LLM_ID" --field model.name=gpt-4o-mini -f app.yaml
-
-# Add a system prompt
-dify-cli node edit "$LLM_ID" \
-  --field 'prompt_template=[{"role":"system","text":"You are helpful."},{"role":"user","text":"{{#sys.query#}}"}]' \
-  -f app.yaml
+```json
+{"id": "llm", "type": "llm", "title": "Call GPT", "fields": {
+  "model": {"provider": "openai", "name": "gpt-4o-mini"},
+  "prompt_template": [{"role": "system", "text": "You are helpful."}, {"role": "user", "text": "{{#sys.query#}}"}]
+}}
 ```
+
+Then `dify-cli apply --spec spec.json -f app.yaml --force` regenerates the DSL.
 
 ### Advanced-chat with conversation memory
 
-```bash
-dify-cli init --mode advanced-chat --name "Chatbot" -o chat.yaml --force
-dify-cli var conversation set user_name --type string --description "Remembered name" -f chat.yaml
-dify-cli var env set SYSTEM_PROMPT "You are a helpful assistant." -f chat.yaml
-dify-cli node add start --title "Start" -f chat.yaml
-START_ID=$(dify-cli node list -f chat.yaml | awk '$2=="start"{print $1; exit}')
-dify-cli node add llm --title "Reply" \
-  --field model.provider=openai --field model.name=gpt-4o \
-  --field 'prompt_template=[{"role":"system","text":"{{#env.SYSTEM_PROMPT#}}"},{"role":"user","text":"{{#sys.query#}}"}]' \
-  -f chat.yaml
-LLM_ID=$(dify-cli node list -f chat.yaml | awk '$2=="llm"{print $1; exit}')
-dify-cli node add answer --title "Answer" \
-  --field "answer={{#$LLM_ID.text#}}" \
-  -f chat.yaml
-ANSWER_ID=$(dify-cli node list -f chat.yaml | awk '$2=="answer"{print $1; exit}')
-dify-cli edge add "$START_ID" "$LLM_ID" -f chat.yaml
-dify-cli edge add "$LLM_ID" "$ANSWER_ID" -f chat.yaml
-dify-cli validate chat.yaml
+Declare conversation/environment variables and nodes in the spec:
+
+```json
+{
+  "mode": "advanced-chat", "name": "Chatbot",
+  "environment_variables": [{"name": "SYSTEM_PROMPT", "value": "You are a helpful assistant."}],
+  "conversation_variables": [{"name": "user_name", "value_type": "string", "description": "Remembered name"}],
+  "nodes": [
+    {"id": "start", "type": "start", "title": "Start"},
+    {"id": "llm", "type": "llm", "title": "Reply", "fields": {
+      "model": {"provider": "openai", "name": "gpt-4o"},
+      "prompt_template": [{"role": "system", "text": "{{#env.SYSTEM_PROMPT#}}"}, {"role": "user", "text": "{{#sys.query#}}"}]
+    }},
+    {"id": "answer", "type": "answer", "title": "Answer", "fields": {"answer": "{{#llm.text#}}"}}
+  ],
+  "edges": [
+    {"source": "start", "target": "llm"},
+    {"source": "llm", "target": "answer"}
+  ]
+}
 ```
 
-Note: `var env set` takes `NAME VALUE` as positional args (not `--value`). `var conversation set` takes `NAME` positional plus `--type`/`--description` options.
+```bash
+dify-cli spec validate --spec spec.json && dify-cli apply --spec spec.json -f chat.yaml --force && dify-cli validate chat.yaml
+```
 
 ## Importing into Dify
 
