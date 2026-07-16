@@ -62,6 +62,16 @@ def apply(
     if file.exists() and not force:
         raise DifyCliError(f"{file} already exists; pass --force to overwrite")
 
+    # Defensive: validate variable references before generating. Run
+    # `dify-cli spec validate` in the design stage to iterate on errors.
+    from ..core.spec_validator import validate_spec
+    spec_errors = validate_spec(spec_data)
+    if spec_errors:
+        typer.secho("Spec has invalid variable references. Run `dify-cli spec validate --spec` for details:", fg=typer.colors.RED)
+        for e in spec_errors:
+            typer.secho(f"FAIL {e}", fg=typer.colors.RED)
+        raise typer.Exit(code=1)
+
     doc = dsl_mod.init_skeleton(
         mode=mode,
         name=name,

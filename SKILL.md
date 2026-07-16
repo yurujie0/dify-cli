@@ -142,6 +142,31 @@ Key points:
 
 **When to use apply vs node add**: use `apply` for anything non-trivial (3+ nodes, or design may change). Use `node add`/`edge add` for quick one-off edits to an existing DSL. They coexist - `apply` generates from scratch, `node edit` mutates in place.
 
+### `dify-cli spec validate` - check a spec before applying (design stage)
+
+```bash
+dify-cli spec validate --spec spec.json
+```
+
+Validates a spec's **variable references and scope** - the semantic rules the JSON schema can't express: every `value_selector`/`variable_selector` must point to a variable the target node actually exposes, and you can't reference a node inside an iteration/loop container from outside it. Run this in the design stage and fix errors BEFORE `apply` (apply also checks defensively, but iterating on `spec validate` is the intended feedback loop).
+
+**Design-stage workflow**:
+1. Analyze the requirement -> author `spec.json`
+2. `dify-cli spec validate --spec spec.json` -> read the errors
+3. Fix the spec -> re-validate until `OK spec is valid`
+4. `dify-cli apply --spec spec.json -f dsl.yaml --force` -> generate the DSL
+
+The validator is the single source of truth for variable semantics - it knows what each node type exposes (start exposes its `variables`, code exposes `outputs` keys, iteration exposes `item`/`index` inside and `output` outside, loop exposes its `loop_variables`, etc.). Common errors it catches:
+
+```
+FAIL end.fields.outputs[0].value_selector: node 'loop' (loop) does not expose variable 'counter'. Exposes: (none).
+     -> define loop_variables on the loop, or reference an existing variable.
+FAIL end.fields.outputs[0].value_selector: cannot reference 'loopbody' from here - it is inside container 'loop'. Reference the container node instead.
+     -> you can't reach into a container; reference the container node (loop/iteration) which exposes its output.
+```
+
+When the validator says a node "does not expose" a variable, check what it actually exposes - for start/code/parameter-extractor that's their declared variables/outputs/parameters; for containers use the container's special vars (`item`/`index`/`output`/`loop_variables`).
+
 ### `dify-cli node` — node CRUD
 
 ```bash

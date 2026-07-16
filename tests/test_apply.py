@@ -72,12 +72,13 @@ def test_apply_iteration_with_children(tmp_path):
     spec = {
         "mode": "workflow", "name": "T", "dsl_version": DSL_VERSION,
         "nodes": [
-            {"id": "start", "type": "start", "title": "Start"},
-            {"id": "iter", "type": "iteration", "title": "Node", "title": "Node", "fields": {
+            {"id": "start", "type": "start", "title": "Start", "fields": {
+                "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]}},
+            {"id": "iter", "type": "iteration", "title": "Node", "fields": {
                 "iterator_selector": ["start", "q"],
                 "output_selector": ["inner", "out"],
             }, "children": [
-                {"id": "inner", "type": "code", "title": "Node", "title": "Node", "fields": {
+                {"id": "inner", "type": "code", "title": "Node", "fields": {
                     "code_language": "python3", "code": "def main(): return {}",
                     "variables": [], "outputs": {"out": {"type": "string"}},
                 }},
@@ -105,8 +106,9 @@ def test_apply_idempotent(tmp_path):
     spec = {
         "mode": "workflow", "name": "T", "dsl_version": DSL_VERSION,
         "nodes": [
-            {"id": "start", "type": "start", "title": "Start"},
-            {"id": "ifelse", "type": "if-else", "title": "Node", "title": "Node", "fields": {
+            {"id": "start", "type": "start", "title": "Start", "fields": {
+                "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]}},
+            {"id": "ifelse", "type": "if-else", "title": "Node", "fields": {
                 "cases": [{"case_id": "true", "logical_operator": "and",
                            "conditions": [{"variable_selector": ["start", "q"],
                                            "comparison_operator": "contains", "value": "x"}]}],

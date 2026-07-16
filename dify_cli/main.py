@@ -3,7 +3,7 @@ from __future__ import annotations
 import typer
 
 from .__version__ import __version__
-from .commands import apply, edge, init, node, schema, validate, var, version
+from .commands import apply, edge, init, node, schema, spec, validate, var, version
 
 app = typer.Typer(
     name="dify-cli",
@@ -35,6 +35,7 @@ app.add_typer(node.app, name="node")
 app.add_typer(edge.app, name="edge")
 app.add_typer(var.app, name="var")
 app.add_typer(schema.app, name="schema")
+app.add_typer(spec.app, name="spec")
 
 
 if __name__ == "__main__":
