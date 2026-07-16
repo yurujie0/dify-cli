@@ -11,17 +11,28 @@ The CLI is **schema-driven**: node field definitions are loaded from pre-generat
 
 **For how to write `spec.json` (format, node fields, variable model, examples), see [SPEC.md](SPEC.md).** This file covers the CLI commands and workflow.
 
-## Primary workflow
+## Primary workflow (two-phase)
 
+**Design stage** (structure + IO contracts):
 ```
-1. author spec.json        (see SPEC.md for format)
-2. dify-cli spec validate  (semantic check: variable refs + scope)
-3. dify-cli apply          (generate DSL, idempotent)
-4. dify-cli validate       (final DSL topology/schema check)
-   -> to change anything: edit spec.json, re-run from step 2
+1. author spec.json        (nodes, hoisted IO/dependencies, @file refs; see SPEC.md)
+2. dify-cli spec validate  (structure check: node types, variable refs, scope, edges)
 ```
 
-The spec is the single source of truth. Never hand-edit the generated DSL - change the spec and re-apply.
+**Implementation stage** (fill node internal config, parallelizable per node):
+```
+3. for each node: generate its @file (code/prompts/model params)
+   dify-cli node check <id> --spec spec.json --fields <file>  (schema + template refs)
+```
+
+**Apply**:
+```
+4. dify-cli apply --spec spec.json -f dsl.yaml --force  (merge hoisted + @file, full validate)
+5. dify-cli validate dsl.yaml                           (final topology check)
+   -> to change: edit spec (@file refs/IO) or @file (internal config), re-run
+```
+
+The spec is the single source of truth. Never hand-edit the generated DSL.
 
 ## When to use
 
@@ -131,13 +142,16 @@ dify-cli schema enum <type> <field>            # allowed values for an enum fiel
 
 Use this to discover which fields a node requires and what enum values are accepted - works on any installed dify-cli, no source access needed.
 
-### `dify-cli node` - inspect nodes (read-only)
+### `dify-cli node` - inspect nodes + check single-node config
 
 ```bash
 dify-cli node list [--file dsl.yaml]           # list nodes (id, type, title)
 dify-cli node show <node_id> [--file dsl.yaml] # show one node's full JSON
 dify-cli node types [--file dsl.yaml]          # list node types in the schema
+dify-cli node check <node_id> --spec spec.json --fields <file>  # implementation-stage check
 ```
+
+`node check` is used in the implementation stage: a sub-agent fills a node's `@file` (internal config), then runs this to verify the merged node data (hoisted IO from spec + internal config) passes backend schema validation, and that template variable references (`{{#node.var#}}`) in the config point to valid in-scope nodes. See [SPEC.md](SPEC.md).
 
 Structural commands (`node add`/`remove`/`edit`) are removed - declare nodes in the spec and use `apply`.
 

@@ -99,6 +99,58 @@ def apply(
     )
 
 
+def _resolve_node_fields(n: dict, node_type: str) -> dict:
+    """Merge a node's internal config (@file or inline dict) with its hoisted
+    IO/dependency fields (which live at the spec node top-level).
+
+    Hoisted fields (variables, outputs, cases, etc.) contain cross-node
+    selectors and are validated at design stage; internal config (code,
+    prompt_template, model) lives in @file and is filled at implementation
+    stage. apply merges them to form the full node data.
+    """
+    from ..core.node_builder import parse_field_value
+    from ..core.spec_format import HOISTED_FIELDS, IGNORED_SPEC_FIELDS
+
+    # Internal config: fields is @file (string -> JSON object) or inline dict.
+    raw_fields = n.get("fields")
+    if isinstance(raw_fields, str):
+        if not raw_fields.startswith("@"):
+            raise DifyCliError(f"node {n.get('id')!r} fields string must be @file reference, got {raw_fields!r}")
+        target = raw_fields[1:]
+        from pathlib import Path as _Path
+        p = _Path(target)
+        if not p.exists():
+            raise DifyCliError(f"node {n.get('id')!r} fields @file not found: {target}")
+        import json as _json
+        try:
+            internal = _json.loads(p.read_text(encoding="utf-8"))
+        except _json.JSONDecodeError as e:
+            raise DifyCliError(f"node {n.get('id')!r} fields @file {target} is not valid JSON: {e}") from e
+        if not isinstance(internal, dict):
+            raise DifyCliError(
+                f"node {n.get('id')!r} fields @file must contain a JSON object, got {type(internal).__name__}"
+            )
+    elif isinstance(raw_fields, dict):
+        internal = raw_fields
+    elif raw_fields is None:
+        internal = {}
+    else:
+        raise DifyCliError(f"node {n.get('id')!r} fields must be @file string or object, got {type(raw_fields).__name__}")
+
+    # Hoisted fields from spec node top-level.
+    hoisted = {f: n[f] for f in HOISTED_FIELDS.get(node_type, []) if f in n}
+
+    # Disallow overlap (ambiguous - is it IO or internal?).
+    overlap = set(internal) & set(hoisted)
+    if overlap:
+        raise DifyCliError(
+            f"node {n.get('id')!r}: fields {sorted(overlap)} appear in both @file and spec top-level. "
+            f"Hoisted IO fields ({sorted(hoisted)}) must not be in @file."
+        )
+
+    return {**internal, **hoisted}
+
+
 def _build_nodes(doc, nodes: list, dsl_version: str) -> None:
     top_index = 0
     for n in nodes:
@@ -108,7 +160,7 @@ def _build_nodes(doc, nodes: list, dsl_version: str) -> None:
             node_type=n["type"],
             dsl_version=dsl_version,
             title=n.get("title"),
-            fields=fields_dict_to_list(n.get("fields") or {}),
+            fields=fields_dict_to_list(_resolve_node_fields(n, n["type"])),
         )
         node["id"] = n["id"]
         # Linear layout for top-level nodes (Dify frontend can auto-arrange).
@@ -127,7 +179,7 @@ def _build_nodes(doc, nodes: list, dsl_version: str) -> None:
                     node_type=child["type"],
                     dsl_version=dsl_version,
                     title=child.get("title"),
-                    fields=fields_dict_to_list(child.get("fields") or {}),
+                    fields=fields_dict_to_list(_resolve_node_fields(child, child["type"])),
                 )
                 cnode["id"] = child["id"]
                 attach_to_parent(cnode, node["id"], n["type"])

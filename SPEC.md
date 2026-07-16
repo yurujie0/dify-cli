@@ -1,8 +1,12 @@
 # Workflow Spec Authoring Guide
 
-This document describes how to author `spec.json` for `dify-cli apply`. The spec is the single source of truth for a workflow - `apply` generates the DSL from it deterministically.
+This document describes how to author `spec.json` for the two-phase workflow: **design stage** writes the spec (structure + IO contracts + dependencies), **implementation stage** fills each node's internal config (`@file`). See [SKILL.md](SKILL.md) for CLI commands.
 
-For the CLI commands themselves, see [SKILL.md](SKILL.md).
+## Two-phase model
+
+- **Design stage**: author `spec.json` with node structure, IO declarations, dependencies (variable selectors), and `@file` references for internal config (files don't exist yet). Run `dify-cli spec validate` to check structure.
+- **Implementation stage**: for each node, a sub-agent generates the `@file` (internal config: code, prompt_template, model params). Run `dify-cli node check <id> --spec spec.json --fields <file>` to verify each node.
+- **Apply**: `dify-cli apply` merges hoisted spec fields + `@file` content, full-validates, generates DSL.
 
 ## Spec format
 
@@ -13,29 +17,43 @@ For the CLI commands themselves, see [SKILL.md](SKILL.md).
   "dsl_version": "0.5.0",
   "description": "",
   "environment_variables": [
-    {"name": "API_KEY", "value": "sk-xxx"},
-    {"name": "BASE_URL", "value": "@/tmp/url.txt"}
+    {"name": "API_KEY", "value": "sk-xxx"}
   ],
   "conversation_variables": [
     {"name": "memory", "value_type": "string", "description": "user memory"}
   ],
   "nodes": [
-    {"id": "start", "type": "start", "title": "Start", "fields": {"variables": [...]}},
-    {"id": "code", "type": "code", "title": "Parse", "fields": {
-      "code_language": "python3",
-      "code": "@/tmp/parse.py",
+    {
+      "id": "start", "type": "start", "title": "Start",
+      "variables": [{"variable": "q", "label": "Query", "type": "text-input", "required": true}],
+      "implementation_hint": "用户输入查询字符串",
+      "fields": "@/tmp/impl/start.json"
+    },
+    {
+      "id": "code", "type": "code", "title": "Parse",
       "variables": [{"variable": "q", "value_selector": ["start", "q"]}],
-      "outputs": {"items": {"type": "array[object]"}}
-    }},
-    {"id": "iter", "type": "iteration", "title": "Loop", "fields": {
+      "outputs": {"items": {"type": "array[string]"}},
+      "_output_schema": {"items": {"element": "string"}},
+      "implementation_hint": "把查询拆成关键词数组",
+      "fields": "@/tmp/impl/code.json"
+    },
+    {
+      "id": "iter", "type": "iteration", "title": "Loop",
       "iterator_selector": ["code", "items"],
-      "output_selector": ["inner", "upper"]
-    }, "children": [
-      {"id": "inner", "type": "code", "title": "Upper", "fields": {"code": "@/tmp/upper.py"}}
-    ]},
-    {"id": "end", "type": "end", "title": "End", "fields": {
-      "outputs": [{"variable": "r", "value_selector": ["iter", "output"]}]
-    }}
+      "output_selector": ["inner", "upper"],
+      "fields": "@/tmp/impl/iter.json",
+      "children": [
+        {"id": "inner", "type": "code", "title": "Upper",
+         "variables": [{"variable": "item", "value_selector": ["iter", "item"]}],
+         "outputs": {"upper": {"type": "string"}},
+         "fields": "@/tmp/impl/inner.json"}
+      ]
+    },
+    {
+      "id": "end", "type": "end", "title": "End",
+      "outputs": [{"variable": "r", "value_selector": ["iter", "output"]}],
+      "fields": "@/tmp/impl/end.json"
+    }
   ],
   "edges": [
     {"source": "start", "target": "code"},
@@ -47,77 +65,72 @@ For the CLI commands themselves, see [SKILL.md](SKILL.md).
 
 ### Top-level fields
 
-- `mode` (required): `workflow` | `advanced-chat` (apply only supports graph-based modes)
+- `mode` (required): `workflow` | `advanced-chat`
 - `name` (required): app name
-- `dsl_version` (optional, default latest bundled): must match a bundled schema version
-- `description` (optional): app description
-- `environment_variables` (optional): list of `{name, value, value_type}` - `value` supports `@file`
+- `dsl_version` (optional, default latest bundled)
+- `description` (optional)
+- `environment_variables` (optional): list of `{name, value, value_type}`
 - `conversation_variables` (optional): list of `{name, value_type, description, value}`
 - `nodes` (required): list of node objects
 - `edges` (required): list of edge objects
 
-### Node object
+### Node object - field layering
 
-- `id` (required): **stable string id** - becomes the node's id in the DSL (NOT a timestamp). Re-applying keeps ids stable so edges and `value_selector` references never break. Choose readable ids (`start`, `llm`, `end`).
-- `type` (required): node type string (e.g. `start`, `llm`, `code`). List via `dify-cli node types`.
-- `title` (required): the schema requires it.
-- `fields` (optional): dict of field overrides - values support `@file`, dict/list, scalars.
-- `children` (optional, iteration/loop only): nodes inside the container. The iteration-start/loop-start child is auto-created - do NOT list it. Children auto-get `parentId`/`isInIteration`.
+Each node has two layers:
+
+**Spec layer** (design stage, visible to `spec validate`):
+- `id` (required): stable string id (NOT a timestamp). Re-apply keeps ids stable.
+- `type` (required): node type string (`dify-cli node types` to list)
+- `title` (required)
+- **Hoisted IO/dependency fields** (per node type, see table below) - contain variable selectors or IO declarations
+- `_output_schema` (optional): IO contract schema with field structure (apply ignores; for future test generation)
+- `implementation_hint` (optional): natural-language description of what the node should do (apply ignores; passed to the implementation sub-agent)
+- `fields`: `@file` reference (string) or inline dict - the node's internal config
+
+**@file layer** (implementation stage, the `fields` content):
+- Internal config only (code, prompt_template, model params, url, headers, etc.)
+- Must NOT contain hoisted fields (they live at spec layer)
+- No cross-node variable selectors (those are hoisted); template refs `{{#node.var#}}` are OK (checked by `node check`)
+
+### Hoisted fields per node type
+
+Fields containing variable selectors or IO declarations are hoisted to spec layer (not in `@file`):
+
+| Node type | Hoisted fields | Why |
+|---|---|---|
+| start | `variables` | input declaration (what the node exposes) |
+| code | `variables`, `outputs` | input deps + output declaration |
+| end | `outputs` | workflow outputs (contain value_selector) |
+| llm | `context` | contains variable_selector |
+| if-else | `cases` | conditions contain variable_selector |
+| iteration | `iterator_selector`, `output_selector` | deps |
+| loop | `loop_variables`, `break_conditions` | state declaration + condition deps |
+| template-transform | `variables` | contains value_selector |
+| variable-aggregator | `variables` | selector array |
+| knowledge-retrieval | `query_variable_selector` | dep |
+| question-classifier | `query_variable_selector` | dep |
+| parameter-extractor | `parameters`, `query` | output declaration + dep |
+| http-request, answer, tool, agent, ... | (none) | all internal config, goes in @file |
 
 ### Edge object
 
-- `source` / `target` (required): reference spec node ids
+- `source` / `target` (required): spec node ids
 - `src_handle` (optional): for if-else branches, `"true"` / `"false"`. Default `"source"`.
 
 ### Key properties
 
-- **Idempotent**: same spec -> byte-identical DSL every time (deterministic node ids, edge ids `<source>-<target>`, condition ids `<node>-cond-<index>`). Safe to re-apply after editing.
-- **Three-layer separation**: spec (`spec.json`) describes structure; `@file` files hold multi-line content (code/prompts/URLs); the generated `dsl.yaml` is derived and never hand-edited.
-
-## Spec field values and @file
-
-Field values can be inline strings, numbers, booleans, arrays, or objects. For multi-line content (code, prompt_template) or sensitive values (URLs), use `@file` - a string value starting with `@` is replaced with the file's contents:
-
-```json
-{"id": "code", "type": "code", "fields": {
-  "code": "@/tmp/parse.py",
-  "prompt_template": "@/tmp/prompt.json"
-}}
-```
-
-This keeps the spec clean and lets you edit code/prompts independently. Use the `write_file` tool to create these files. `@-` reads from stdin.
-
-## Common node types
-
-Full list via `dify-cli node types` (28 types). Most-used:
-
-| Type | DSL string | Required fields (beyond defaults) |
-|---|---|---|
-| Start | `start` | none (variables default to `[]`) |
-| End | `end` | `outputs` (array of output variable selectors) |
-| LLM | `llm` | `model.provider`, `model.name` (mode defaults to `chat`) |
-| HTTP Request | `http-request` | `url` (method defaults to `get`) |
-| Code | `code` | `code_language`, `code`, `variables`, `outputs` |
-| Knowledge Retrieval | `knowledge-retrieval` | `dataset_ids` |
-| If-Else | `if-else` | `cases` (branch conditions) |
-| Template Transform | `template-transform` | `template`, `variables` |
-| Question Classifier | `question-classifier` | `model`, `query_variable_selector`, `classes` |
-| Tool | `tool` | `provider_id`, `tool_name`, `tool_parameters` |
-| Variable Aggregator | `variable-aggregator` | `variables` |
-| Iteration | `iteration` | `iterator_selector`, `output_selector` |
-| Loop | `loop` | `loop_variables`, `break_conditions` |
-| Agent | `agent` | `model`, `strategy`, `tools` |
-| Answer | `answer` | `answer` (template string) |
+- **Idempotent**: same spec + same @files -> byte-identical DSL (deterministic ids, edge ids `<source>-<target>`, condition ids `<node>-cond-<index>`).
+- **Design stage can validate without @file**: `spec validate` only checks hoisted fields (structure), not @file content.
 
 ## Variable model (what each node exposes)
 
-`dify-cli spec validate` checks every `value_selector`/`variable_selector` against this model. A reference `["node_id", "var"]` is valid only if `node_id` exists, is in scope, and exposes `var`.
+`spec validate` and `node check` check every `value_selector`/`variable_selector` against this model.
 
 | Node type | Exposes | Scope note |
 |---|---|---|
 | start | `variables[].variable` | visible to all downstream |
 | code | `outputs` keys | visible to all downstream |
-| llm | `text` (+ structured_output keys) | visible to all downstream |
+| llm | `text` | visible to all downstream |
 | http-request | `body`, `headers`, `status_code`, `files` | visible to all downstream |
 | template-transform | `output` | visible to all downstream |
 | variable-aggregator | `output` | visible to all downstream |
@@ -129,110 +142,67 @@ Full list via `dify-cli node types` (28 types). Most-used:
 | end / answer | (none, sink) | - |
 | tool / agent | (loose - not statically checked) | depends on runtime config |
 
-**Scope rule**: a node is visible to the referencing node if the target is top-level, or both are in the same container. You **cannot reference a node inside an iteration/loop from outside it** - reference the container node instead (iteration exposes `output`, loop exposes its `loop_variables`).
+**Scope rule**: a node is visible to the referencing node if the target is top-level, or both are in the same container. You **cannot reference a node inside an iteration/loop from outside it** - reference the container node instead.
 
-**Exception**: `iteration.output_selector` legitimately points at an inner node (it names which inner output to collect) - this is the only field that can reach into a container.
+**Exception**: `iteration.output_selector` legitimately points at an inner node.
+
+## @file content (internal config)
+
+The `@file` (fields) holds internal node config. Examples of what goes in @file (NOT hoisted):
+
+- **code**: `{code_language, code}` (the actual Python/JS code)
+- **llm**: `{model, prompt_template, vision, ...}` (model params + prompts)
+- **http-request**: `{url, method, headers, body, ...}`
+- **answer**: `{answer}` (template string, may contain `{{#node.var#}}`)
+- **template-transform**: `{template}` (the template string; `variables` is hoisted)
+
+Use the `write_file` tool to create these files in the implementation stage. Template variable refs (`{{#node.var#}}`) inside @file are checked by `node check` against the spec.
 
 ## Node field gotchas
 
-These field shapes are easy to get wrong. All examples show the spec `fields` value. When unsure, run `dify-cli schema node <type>` for the authoritative shape.
+When unsure about a field's shape, run `dify-cli schema node <type>`.
 
-**start `variables[]`** items require `variable`, `label`, and `type`. `type` is one of: `text-input`, `paragraph`, `number`, `select`, `file`, `file-list`, `json_object`. For `select`, add `options`:
-```json
-"fields": {"variables": [
-  {"variable": "name", "label": "Name", "type": "text-input", "required": true},
-  {"variable": "role", "label": "Role", "type": "select", "options": ["admin","user"], "required": true}
-]}
-```
+**start `variables[]`** items require `variable`, `label`, `type`. `type`: `text-input`/`paragraph`/`number`/`select`/`file`/`file-list`/`json_object`. For `select`, add `options`. (hoisted)
 
-**if-else `cases[].conditions[]`** uses `variable_selector` (NOT `variable`). `value` accepts only string / array[string] / boolean / null - **not number** (use a string operator like `not empty` for numeric checks):
-```json
-"fields": {"cases": [{"case_id": "true", "logical_operator": "and", "conditions": [
-  {"variable_selector": ["start", "input"], "comparison_operator": "contains", "value": "hello"}
-]}]}
-```
+**if-else `cases[].conditions[]`** uses `variable_selector` (NOT `variable`). `value` accepts string/array[string]/boolean/null - **not number**. (hoisted)
 
-**http-request `headers` / `params`** are **strings** (one `key: value` per line), not objects:
-```json
-"fields": {"headers": "Content-Type: application/json\nAuthorization: Bearer xxx"}
-```
+**http-request `headers`/`params`** are **strings** (one `key: value` per line), not objects. (@file)
 
-**http-request `body`** is an object with `type` (`none`/`form-data`/`x-www-form-urlencoded`/`raw-text`/`json`/`binary`) and `data`:
-```json
-"fields": {"body": {"type": "json", "data": [{"key": "", "type": "text", "value": "{\"k\":\"v\"}"}]}}
-```
+**http-request `body`** is `{type, data}` where type is `none`/`form-data`/`x-www-form-urlencoded`/`raw-text`/`json`/`binary`. (@file)
 
-**end `outputs[]`** items use `variable` (output name) + `value_selector` (path to upstream output):
-```json
-"fields": {"outputs": [{"variable": "result", "value_selector": ["llm", "text"]}]}
-```
+**end `outputs[]`** items: `{variable, value_selector}`. (hoisted)
 
-**variable-aggregator `variables`** is an array of arrays (each inner array is a value selector):
-```json
-"fields": {"variables": [["node1", "output"], ["node2", "output"]], "output_type": "string"}
-```
+**variable-aggregator `variables`** is array of arrays (each inner array is a selector). (hoisted)
 
-**code `variables[]`** items are `{variable, value_selector}` - `variable` is the Python parameter name, `value_selector` is the path to the upstream output:
-```json
-"fields": {"variables": [{"variable": "name", "value_selector": ["start", "name"]}]}
-```
+**code `variables[]`** items: `{variable, value_selector}`. (hoisted; `variable` is the Python param name)
 
-**code `outputs`** is an object mapping output name -> `{type: <SegmentType>}`. SegmentType: `string`, `number`, `object`, `array[string]`, `array[object]`, `array[number]`, `boolean`, `file`, `array[file]`, `secret`, `none`:
-```json
-"fields": {"outputs": {"items": {"type": "array[object]"}, "count": {"type": "number"}}}
-```
+**code `outputs`** is `{name: {type: SegmentType}}`. SegmentType: `string`/`number`/`object`/`array[string]`/`array[object]`/`array[number]`/`boolean`/`file`/`array[file]`/`secret`/`none`. (hoisted)
 
-**code `code_language`** accepts only `python3` or `javascript` (NOT `python`; the CLI auto-corrects `python`->`python3`).
+**code `code_language`** accepts only `python3` or `javascript` (NOT `python`; auto-corrected). (@file)
 
-**iteration** requires `iterator_selector` (array to loop over) and `output_selector` (path to the inner node's output to collect). The iteration-start child is auto-created by `apply` - do NOT list it. Inner nodes go in `children` and reference `[<iteration_id>, "item"]`:
-```json
-{"id": "iter", "type": "iteration", "fields": {
-  "iterator_selector": ["code", "items"],
-  "output_selector": ["inner", "result"]
-}, "children": [
-  {"id": "inner", "type": "code", "fields": {
-    "variables": [{"variable": "item", "value_selector": ["iter", "item"]}]
-  }}
-]}
-```
+**iteration** requires `iterator_selector` + `output_selector` (hoisted). iteration-start child auto-created by apply - do NOT list it. Inner nodes in `children` reference `[<iter_id>, "item"]`.
 
-**loop** exposes its `loop_variables` (by `label`) to both inner children and outside nodes. `break_conditions` reference the loop's own variables, NOT child outputs:
-```json
-{"id": "loop", "type": "loop", "fields": {
-  "loop_variables": [{"label": "counter", "var_type": "number", "value": "0", "value_type": "constant"}],
-  "break_conditions": [{"variable_selector": ["loop", "counter"], "comparison_operator": "≥", "value": "5"}]
-}}
-```
+**loop** exposes `loop_variables[].label` (hoisted). `break_conditions` reference the loop's own variables, NOT child outputs.
 
-**Comparison operators**: `contains`, `is`, `empty`, `not empty`, `=`, `≠`, `>`, `<`, `≥`, `≤`. Run `dify-cli schema enum if-else comparison_operator` for the full list.
+**Comparison operators**: `contains`/`is`/`empty`/`not empty`/`=`/`≠`/`>`/`<`/`≥`/`≤`. Run `dify-cli schema enum if-else comparison_operator` for full list.
 
-**LLM `prompt_template`** is a JSON array of message objects. In the spec it's just a normal JSON value - no shell quoting issues:
-```json
-"fields": {
-  "model": {"provider": "openai", "name": "gpt-4o"},
-  "prompt_template": [
-    {"role": "system", "text": "You are helpful. Use {{#start.input#}} as context."},
-    {"role": "user", "text": "Summarize."}
-  ]
-}
-```
-For very long prompts, write the text to a file and reference with `@file`: `{"role": "system", "text": "@/tmp/system_prompt.txt"}`.
+**LLM `prompt_template`** is a JSON array of `{role, text}`. (@file) For long prompts, `@file` the whole fields file.
 
 ## Examples
 
 ### Minimal LLM workflow
 
+Design spec:
 ```json
 {
   "mode": "workflow", "name": "My App",
   "nodes": [
-    {"id": "start", "type": "start", "title": "Start"},
-    {"id": "llm", "type": "llm", "title": "Call GPT", "fields": {
-      "model": {"provider": "openai", "name": "gpt-4o"}
-    }},
-    {"id": "end", "type": "end", "title": "End", "fields": {
-      "outputs": [{"variable": "result", "value_selector": ["llm", "text"]}]
-    }}
+    {"id": "start", "type": "start", "title": "Start", "fields": "@/tmp/impl/start.json"},
+    {"id": "llm", "type": "llm", "title": "Call GPT",
+     "fields": "@/tmp/impl/llm.json"},
+    {"id": "end", "type": "end", "title": "End",
+     "outputs": [{"variable": "result", "value_selector": ["llm", "text"]}],
+     "fields": "@/tmp/impl/end.json"}
   ],
   "edges": [
     {"source": "start", "target": "llm"},
@@ -242,35 +212,16 @@ For very long prompts, write the text to a file and reference with `@file`: `{"r
 ```
 
 ```bash
-dify-cli spec validate --spec spec.json
+dify-cli spec validate --spec spec.json   # design stage: structure OK
+
+# implementation stage: sub-agents generate @files
+# /tmp/impl/llm.json: {"model": {"provider":"openai","name":"gpt-4o"}, "prompt_template":[...]}
+dify-cli node check llm --spec spec.json --fields /tmp/impl/llm.json
+
 dify-cli apply --spec spec.json -f app.yaml --force
 dify-cli validate app.yaml
 ```
 
-The LLM node only needs `model.provider` and `model.name` - `mode`, `completion_params.temperature`, `prompt_template`, `context`, `vision` come from the frontend defaults.
-
-### Advanced-chat with conversation memory
-
-```json
-{
-  "mode": "advanced-chat", "name": "Chatbot",
-  "environment_variables": [{"name": "SYSTEM_PROMPT", "value": "You are a helpful assistant."}],
-  "conversation_variables": [{"name": "user_name", "value_type": "string", "description": "Remembered name"}],
-  "nodes": [
-    {"id": "start", "type": "start", "title": "Start"},
-    {"id": "llm", "type": "llm", "title": "Reply", "fields": {
-      "model": {"provider": "openai", "name": "gpt-4o"},
-      "prompt_template": [{"role": "system", "text": "{{#env.SYSTEM_PROMPT#}}"}, {"role": "user", "text": "{{#sys.query#}}"}]
-    }},
-    {"id": "answer", "type": "answer", "title": "Answer", "fields": {"answer": "{{#llm.text#}}"}}
-  ],
-  "edges": [
-    {"source": "start", "target": "llm"},
-    {"source": "llm", "target": "answer"}
-  ]
-}
-```
-
 ### Changing the workflow
 
-Edit `spec.json` (add/remove nodes, change fields, update edges) and re-run `spec validate` + `apply`. Never hand-edit the generated DSL. Example: change the model and add a system prompt by editing the llm node in the spec, then `dify-cli apply --spec spec.json -f app.yaml --force`.
+Edit `spec.json` (structure/IO) and/or the `@file` (internal config), re-run `spec validate` + `apply`. Never hand-edit the generated DSL.

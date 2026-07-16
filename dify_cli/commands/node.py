@@ -136,6 +136,90 @@ def remove(
     typer.secho(f"Removed node {node_id!r}", fg=typer.colors.GREEN)
 
 
+@app.command("check")
+def check(
+    node_id: str = typer.Argument(..., help="The node id as declared in the spec"),
+    spec: Path = typer.Option(..., "--spec", "-s", help="Design-stage spec.json (provides IO context + dependency declarations)"),
+    fields: Path = typer.Option(..., "--fields", help="JSON file with the node's internal config (the @file content)"),
+    dsl_version: Optional[str] = typer.Option(None, "--dsl-version", "-v", help="DSL version (default: from spec or latest)"),
+) -> None:
+    """Check a single node's internal config against the design spec.
+
+    Used in the implementation stage: a sub-agent fills a node's @file
+    (internal config like code/prompt_template), then runs this to verify
+    the merged node data (hoisted IO from spec + internal config) passes
+    backend schema validation, and that template variable references
+    ({{#node.var#}}) in the internal config point to valid in-scope nodes.
+    """
+    import json as _json
+    from ..core.node_builder import _post_process, fields_dict_to_list, parse_field_value
+    from ..core.spec_format import HOISTED_FIELDS
+    from ..core.spec_validator import _walk_all_strings, _extract_template_refs, _exposed_vars, _in_scope
+
+    spec_data = _json.loads(spec.read_text(encoding="utf-8"))
+    # Flatten spec nodes (including children) to find the target.
+    flat = []
+    for n in spec_data.get("nodes", []):
+        flat.append(n)
+        if n.get("type") in ("iteration", "loop"):
+            for child in n.get("children", []):
+                child = dict(child)
+                child["_parentId"] = n["id"]
+                flat.append(child)
+    target_spec = next((n for n in flat if n.get("id") == node_id), None)
+    if target_spec is None:
+        raise DifyCliError(f"Node {node_id!r} not found in spec {spec}")
+    ntype = target_spec.get("type", "")
+
+    # Internal config from --fields file.
+    internal = _json.loads(fields.read_text(encoding="utf-8"))
+    if not isinstance(internal, dict):
+        raise DifyCliError(f"--fields must contain a JSON object, got {type(internal).__name__}")
+
+    # Merge hoisted (from spec) + internal.
+    hoisted = {f: target_spec[f] for f in HOISTED_FIELDS.get(ntype, []) if f in target_spec}
+    overlap = set(internal) & set(hoisted)
+    if overlap:
+        raise DifyCliError(f"fields {sorted(overlap)} appear in both --fields and spec top-level (hoisted).")
+    merged = {**internal, **hoisted}
+
+    nodes_by_id = {n["id"]: n for n in flat}
+    ver = dsl_version or spec_data.get("dsl_version") or "0.5.0"
+
+    errors: list[str] = []
+    # 1. Schema validation on merged data.
+    try:
+        schema = get_node_schema(ver, ntype)
+        data = dict(merged)
+        data.setdefault("type", ntype)
+        data.setdefault("title", target_spec.get("title", ""))
+        _post_process(ntype, data)
+        validate_node_data(ntype, data, schema)
+    except DifyCliError as e:
+        errors.append(f"schema: {e}")
+
+    # 2. Template variable references ({{#node.var#}}) in internal config.
+    for path, value in _walk_all_strings(internal):
+        for ref_id, ref_var in _extract_template_refs(value):
+            ref_node = nodes_by_id.get(ref_id)
+            if ref_node is None:
+                errors.append(f"{path}: template ref {ref_id!r} does not exist in spec")
+                continue
+            if not _in_scope(ref_node, target_spec, path):
+                errors.append(f"{path}: template ref {ref_id!r} is out of scope (inside container)")
+                continue
+            if ref_node.get("type") not in {"tool", "agent"}:
+                exposed = _exposed_vars(ref_node, target_spec)
+                if ref_var not in exposed:
+                    errors.append(f"{path}: {ref_id!r} does not expose {ref_var!r}. Exposes: {sorted(exposed) or '(none)'}")
+
+    if errors:
+        for e in errors:
+            typer.secho(f"FAIL {e}", fg=typer.colors.RED)
+        raise typer.Exit(code=1)
+    typer.secho(f"OK node {node_id!r} ({ntype}) internal config is valid", fg=typer.colors.GREEN)
+
+
 @app.command("types")
 def types(
     dsl_version: Optional[str] = typer.Option(

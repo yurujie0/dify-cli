@@ -39,8 +39,11 @@ _SELECTOR_LIST_FIELDS = {
 
 
 def validate_spec(spec: dict[str, Any]) -> list[str]:
-    """Validate a spec's variable references and scope. Returns a list of
-    human-readable error strings (empty = valid)."""
+    """Validate a spec's structure at design stage: node types, IO variable
+    references, edges, and scope. Does NOT read @file (internal config) -
+    that's filled at implementation stage and checked by `node check` / apply.
+
+    Returns a list of human-readable error strings (empty = valid)."""
     if not isinstance(spec, dict):
         return ["spec must be a JSON object"]
     nodes = spec.get("nodes", [])
@@ -70,26 +73,21 @@ _CONTAINER_CHILD_FIELDS = {"output_selector"}
 
 
 def _extract_references(node: dict[str, Any]) -> Iterator[tuple[str, list]]:
-    """Yield (field_path, selector) pairs from a node's fields."""
+    """Yield (field_path, selector) pairs from a spec node's hoisted top-level
+    fields. Does NOT read `fields` (@file) - selectors live at the spec layer."""
     ntype = node.get("type", "")
-    fields = node.get("fields") or {}
 
     for pattern in _SELECTOR_FIELDS.get(ntype, []):
-        for path, value in _walk_pattern(fields, pattern):
+        for path, value in _walk_pattern(node, pattern):
             if isinstance(value, list) and len(value) >= 2:
                 yield (path, value)
 
     for pattern in _SELECTOR_LIST_FIELDS.get(ntype, []):
-        for path, value in _walk_pattern(fields, pattern):
+        for path, value in _walk_pattern(node, pattern):
             if isinstance(value, list):
                 for item in value:
                     if isinstance(item, list) and len(item) >= 2:
                         yield (path, item)
-
-    # Template strings: {{#node_id.var#}} - extract node_id and var.
-    for path, value in _walk_all_strings(fields):
-        for node_id, var in _extract_template_refs(value):
-            yield (path, [node_id, var])
 
 
 def _walk_pattern(data: Any, pattern: str) -> Iterator[tuple[str, Any]]:
@@ -184,22 +182,18 @@ def _in_scope(target: dict, ref: dict, path: str = "") -> bool:
 
 def _exposed_vars(target: dict, ref: dict) -> set[str]:
     """Variables a target node exposes to the referencing node. For containers
-    (iteration/loop), depends on whether ref is inside the target."""
+    (iteration/loop), depends on whether ref is inside the target. Reads IO
+    declarations from the spec node top-level (hoisted fields), not @file."""
     ttype = target.get("type", "")
-    fields = target.get("fields") or {}
     ref_inside_target = (ref.get("_parentId") or ref.get("parentId")) == target.get("id")
 
     if ttype == "start":
-        return {v.get("variable", "") for v in fields.get("variables", []) if isinstance(v, dict)}
+        return {v.get("variable", "") for v in target.get("variables", []) if isinstance(v, dict)}
     if ttype == "code":
-        outs = fields.get("outputs", {})
+        outs = target.get("outputs", {})
         return set(outs.keys()) if isinstance(outs, dict) else set()
     if ttype == "llm":
-        base = {"text"}
-        so = fields.get("structured_output")
-        if isinstance(so, dict):
-            base |= set(so.keys())
-        return base
+        return {"text"}  # structured_output is in @file, not checked at design stage
     if ttype == "http-request":
         return {"body", "headers", "status_code", "files"}
     if ttype in ("template-transform", "variable-aggregator", "list-operator"):
@@ -207,14 +201,14 @@ def _exposed_vars(target: dict, ref: dict) -> set[str]:
     if ttype == "iteration":
         return {"item", "index"} if ref_inside_target else {"output"}
     if ttype == "loop":
-        lvs = fields.get("loop_variables", [])
+        lvs = target.get("loop_variables", [])
         return {lv.get("label", "") for lv in lvs if isinstance(lv, dict)}
     if ttype == "knowledge-retrieval":
         return {"result"}
     if ttype == "question-classifier":
         return {"class_name"}
     if ttype == "parameter-extractor":
-        params = fields.get("parameters", [])
+        params = target.get("parameters", [])
         return {p.get("name", "") for p in params if isinstance(p, dict)}
     if ttype == "document-extractor":
         return {"text", "result"}
