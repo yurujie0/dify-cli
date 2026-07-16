@@ -1,29 +1,34 @@
 ---
 name: dify-cli
-description: Build and edit Dify DSL (workflow / chatflow) YAML files from the command line. Use when the user wants to author, scaffold, or programmatically generate Dify app definitions — init a workflow/chatflow skeleton, add/edit/remove nodes and edges, manage environment/conversation variables, and validate against the Dify schema before importing into a Dify instance. Schema-driven: works across DSL versions without code changes.
+description: Build Dify DSL (workflow / chatflow) YAML files declaratively. Use when the user wants to author or programmatically generate Dify app definitions - write a spec, validate it, apply it to generate DSL, and validate before importing into Dify. Schema-driven: works across DSL versions without code changes.
 ---
 
 # dify-cli
 
-`dify-cli` is a command-line tool for authoring Dify DSL YAML files. It lets you build workflows and chatflows as code — init a scaffold, add nodes and edges, set variables, validate, then import the result into a Dify instance.
+`dify-cli` is a command-line tool for authoring Dify DSL YAML files **declaratively**: you write a spec (the single source of truth), validate it, and `apply` generates the DSL. Edits go back through the spec + re-apply, not by mutating the DSL directly.
 
-The CLI is **schema-driven**: node field definitions are loaded from pre-generated JSON Schema bundles keyed by DSL version (`dify_cli/schemas/v<ver>.json` + `defaults-v<ver>.json`). When Dify upgrades the DSL, only a new schema bundle needs to be regenerated — the CLI code itself does not change.
+The CLI is **schema-driven**: node field definitions are loaded from pre-generated JSON Schema bundles keyed by DSL version (`dify_cli/schemas/v<ver>.json` + `defaults-v<ver>.json`). When Dify upgrades the DSL, only a new schema bundle needs to be regenerated - the CLI code itself does not change.
+
+## Primary workflow
+
+```
+1. author spec.json        (nodes, edges, env/conversation variables)
+2. dify-cli spec validate  (semantic check: variable refs + scope)
+3. dify-cli apply          (generate DSL, idempotent)
+4. dify-cli validate       (final DSL topology/schema check)
+   -> to change anything: edit spec.json, re-run from step 2
+```
+
+The spec is the single source of truth. Never hand-edit the generated DSL - change the spec and re-apply. Structural imperative commands (`init`, `node add/remove`, `edge add/remove`, `node edit`, `var ... set/remove`) are deprecated in favor of declaring everything in the spec. Read-only commands (`node list/show`, `edge list`, `validate`, `schema`, `spec validate`) remain for inspection.
 
 ## When to use
 
 Use this skill when the user asks to:
 
-- **Scaffold a Dify app as code** — "create a workflow DSL file", "generate a chatflow YAML"
-- **Build workflows programmatically** — "add an LLM node", "connect start to llm", "set up environment variables"
-- **Edit existing DSL files** — "add a node to this dsl.yaml", "change the model on the LLM node"
-- **Validate a DSL before importing** — "check this DSL file is valid"
-- **Author complex workflows via script/CICD** — generating DSL from templates, parameterizing deployments
-
-Do NOT use for:
-
-- Running or executing workflows (use the Dify API directly)
-- Importing DSLs into Dify (that's the Dify web UI's job — this tool only generates/edits the file)
-- Managing Dify instances, datasets, or plugins
+- **Build a workflow/chatflow as code** - "create a workflow", "generate a chatflow"
+- **Generate Dify DSL programmatically** - from a design doc or template
+- **Validate a DSL before importing** - "check this DSL file is valid"
+- **Author complex workflows via CI/CD** - declarative spec, idempotent apply
 
 ## Quick probe (for agents)
 
@@ -104,6 +109,13 @@ Generates the ENTIRE workflow from one spec file - nodes, edges, and per-node fi
 ```json
 {
   "mode": "workflow", "name": "My App", "dsl_version": "0.5.0",
+  "environment_variables": [
+    {"name": "API_KEY", "value": "sk-xxx"},
+    {"name": "BASE_URL", "value": "@/tmp/url.txt"}
+  ],
+  "conversation_variables": [
+    {"name": "memory", "value_type": "string", "description": "user memory"}
+  ],
   "nodes": [
     {"id": "start", "type": "start", "title": "Start", "fields": {"variables": [...]}},
     {"id": "code", "type": "code", "title": "Parse", "fields": {
@@ -140,7 +152,9 @@ Key points:
 
 **Three-layer separation**: the spec (`spec.json`) describes structure; `@file` files hold multi-line content (code/prompts/URLs); the generated `dsl.yaml` is derived and never hand-edited. Change the spec -> re-apply; change code -> re-apply (the `@file` is re-read).
 
-**When to use apply vs node add**: use `apply` for anything non-trivial (3+ nodes, or design may change). Use `node add`/`edge add` for quick one-off edits to an existing DSL. They coexist - `apply` generates from scratch, `node edit` mutates in place.
+**Spec covers everything**: nodes, edges, AND environment/conversation variables. Do not use `var env set` / `var conversation set` / `node add` / `edge add` / `node edit` - declare them in the spec and re-apply. The spec is the single source of truth; the generated DSL is derived and never hand-edited.
+
+**Environment/conversation variables** in the spec: `environment_variables` is a list of `{name, value, value_type}` (value supports `@file` for URLs); `conversation_variables` is a list of `{name, value_type, description, value}`. See the spec format above.
 
 ### `dify-cli spec validate` - check a spec before applying (design stage)
 

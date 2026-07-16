@@ -121,37 +121,6 @@ def show(
     typer.echo(_json.dumps(node, indent=2, ensure_ascii=False))
 
 
-@app.command("edit")
-def edit(
-    node_id: str = typer.Argument(...),
-    file: Path = typer.Option(Path("dsl.yaml"), "--file", "-f"),
-    field: list[str] = typer.Option([], "--field", help="key=value to set (dotted keys supported)"),
-    fields_file: Optional[Path] = typer.Option(None, "--fields-file", help="Read field overrides from a JSON file (object of {key: value})"),
-) -> None:
-    """Edit fields on an existing node."""
-    from ..core.node_builder import _post_process, apply_fields, fields_dict_to_list
-    fields = list(field)
-    if fields_file is not None:
-        import json as _json
-        data_obj = _json.loads(fields_file.read_text(encoding="utf-8"))
-        if not isinstance(data_obj, dict):
-            raise DifyCliError(f"--fields-file must contain a JSON object, got {type(data_obj).__name__}")
-        fields.extend(fields_dict_to_list(data_obj))
-    doc = _load(file)
-    node = graph_mod.find_node(doc.nodes, node_id)
-    if node is None:
-        raise DifyCliError(f"Node {node_id!r} not found")
-    data = node.setdefault("data", {})
-    apply_fields(data, fields)
-    ntype = data.get("type")
-    if ntype:
-        _post_process(ntype, data)
-        schema = get_node_schema(doc.version, ntype)
-        validate_node_data(ntype, data, schema)
-    dsl_mod.save(file, doc)
-    typer.secho(f"Updated node {node_id!r}", fg=typer.colors.GREEN)
-
-
 @app.command("remove")
 def remove(
     node_id: str = typer.Argument(...),

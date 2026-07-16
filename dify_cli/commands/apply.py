@@ -88,6 +88,7 @@ def apply(
     _build_nodes(doc, spec_data.get("nodes", []), dsl_version)
     _build_edges(doc, spec_data.get("edges", []))
     _connect_container_starts(doc)
+    _build_variables(doc, spec_data)
     _make_condition_ids_deterministic(doc)
 
     dsl_mod.save(file, doc)
@@ -209,3 +210,26 @@ def _connect_container_starts(doc) -> None:
                 edge_id=f"{start_id}-{child_id}",
             )
             graph_mod.add_edge(doc, edge)
+
+
+def _build_variables(doc, spec_data: dict) -> None:
+    """Generate environment_variables and conversation_variables from the spec.
+
+    Lets the spec declare variables declaratively (instead of `var env set`
+    / `var conversation set`), keeping the spec as the single source of truth.
+    Env var values support @file (for URLs blocked by agent frameworks).
+    """
+    from ..core.node_builder import parse_field_value
+    for ev in spec_data.get("environment_variables", []) or []:
+        doc.environment_variables.append({
+            "name": ev["name"],
+            "value": parse_field_value(ev["value"]) if isinstance(ev["value"], str) else ev["value"],
+            "value_type": ev.get("value_type", "string"),
+        })
+    for cv in spec_data.get("conversation_variables", []) or []:
+        doc.conversation_variables.append({
+            "name": cv["name"],
+            "value_type": cv.get("value_type", "string"),
+            "value": cv.get("value"),
+            "description": cv.get("description", ""),
+        })
