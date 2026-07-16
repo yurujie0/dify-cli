@@ -39,7 +39,9 @@ def parse_field_value(raw: str) -> Any:
             raise NodeValidationError("", f"Field value file not found: {target}")
         return p.read_text(encoding="utf-8")
     s = raw.strip()
-    if s and s[0] in "{[":
+    # Template variables like {{#node.var#}} start with {{ - NOT JSON. Treat as
+    # plain string. (A real JSON object starts with {" or {space, not {{.)
+    if s and s[0] in "{[" and not s.startswith("{{"):
         try:
             return json.loads(s)
         except json.JSONDecodeError as e:
@@ -172,6 +174,7 @@ def build_node(
     node_id: str | None = None,
     title: str | None = None,
     fields: list[str] | None = None,
+    fields_dict: dict[str, Any] | None = None,
     position: dict[str, float] | None = None,
 ) -> dict[str, Any]:
     schema = get_node_schema(dsl_version, node_type)
@@ -187,7 +190,9 @@ def build_node(
     data.setdefault("desc", "")
     data.setdefault("selected", False)
 
-    if fields:
+    if fields_dict:
+        data = _deep_merge(data, fields_dict)
+    elif fields:
         user_overlay: dict[str, Any] = {}
         apply_fields(user_overlay, fields)
         data = _deep_merge(data, user_overlay)

@@ -199,8 +199,13 @@ def check(
         errors.append(f"schema: {e}")
 
     # 2. Template variable references ({{#node.var#}}) in internal config.
+    # {{#env.VAR#}} and {{#sys.VAR#}} reference environment/system variables,
+    # not nodes - skip them.
+    _BUILTIN_SCOPES = {"env", "sys"}
     for path, value in _walk_all_strings(internal):
         for ref_id, ref_var in _extract_template_refs(value):
+            if ref_id in _BUILTIN_SCOPES:
+                continue
             ref_node = nodes_by_id.get(ref_id)
             if ref_node is None:
                 errors.append(f"{path}: template ref {ref_id!r} does not exist in spec")

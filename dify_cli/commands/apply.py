@@ -148,7 +148,26 @@ def _resolve_node_fields(n: dict, node_type: str) -> dict:
             f"Hoisted IO fields ({sorted(hoisted)}) must not be in @file."
         )
 
-    return {**internal, **hoisted}
+    return _resolve_atfile_strings({**internal, **hoisted})
+
+
+def _resolve_atfile_strings(obj):
+    """Walk a dict/list and replace any string value starting with '@' with
+    the file's contents (raw text). Lets a fields JSON reference external
+    files for individual long values (e.g. code) while keeping the rest inline.
+    Does NOT recurse into the file contents."""
+    from ..core.node_builder import parse_field_value
+    if isinstance(obj, dict):
+        return {k: _resolve_atfile_strings(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_resolve_atfile_strings(v) for v in obj]
+    if isinstance(obj, str) and obj.startswith("@") and not obj.startswith("@-"):
+        from pathlib import Path as _Path
+        target = obj[1:]
+        p = _Path(target)
+        if p.exists():
+            return p.read_text(encoding="utf-8")
+    return obj
 
 
 def _build_nodes(doc, nodes: list, dsl_version: str) -> None:
@@ -160,7 +179,7 @@ def _build_nodes(doc, nodes: list, dsl_version: str) -> None:
             node_type=n["type"],
             dsl_version=dsl_version,
             title=n.get("title"),
-            fields=fields_dict_to_list(_resolve_node_fields(n, n["type"])),
+            fields_dict=_resolve_node_fields(n, n["type"]),
         )
         node["id"] = n["id"]
         # Linear layout for top-level nodes (Dify frontend can auto-arrange).
@@ -179,7 +198,7 @@ def _build_nodes(doc, nodes: list, dsl_version: str) -> None:
                     node_type=child["type"],
                     dsl_version=dsl_version,
                     title=child.get("title"),
-                    fields=fields_dict_to_list(_resolve_node_fields(child, child["type"])),
+                    fields_dict=_resolve_node_fields(child, child["type"]),
                 )
                 cnode["id"] = child["id"]
                 attach_to_parent(cnode, node["id"], n["type"])
