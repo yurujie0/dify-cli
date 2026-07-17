@@ -176,11 +176,13 @@ def check(
     if not isinstance(internal, dict):
         raise DifyCliError(f"--fields must contain a JSON object, got {type(internal).__name__}")
 
-    # Merge hoisted (from spec) + internal.
+    # Merge hoisted (from spec) + internal. Hoisted wins over @file
+    # (spec is the source of truth). If @file accidentally includes a
+    # hoisted field, just drop it - no error.
     hoisted = {f: target_spec[f] for f in HOISTED_FIELDS.get(ntype, []) if f in target_spec}
-    overlap = set(internal) & set(hoisted)
-    if overlap:
-        raise DifyCliError(f"fields {sorted(overlap)} appear in both --fields and spec top-level (hoisted).")
+    for f in list(internal):
+        if f in hoisted:
+            del internal[f]
     merged = {**internal, **hoisted}
 
     nodes_by_id = {n["id"]: n for n in flat}

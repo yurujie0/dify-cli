@@ -137,16 +137,16 @@ def _resolve_node_fields(n: dict, node_type: str) -> dict:
     else:
         raise DifyCliError(f"node {n.get('id')!r} fields must be @file string or object, got {type(raw_fields).__name__}")
 
-    # Hoisted fields from spec node top-level.
+    # Hoisted fields from spec node top-level. Hoisted wins over @file
+    # (spec is the source of truth for structure/IO).
     hoisted = {f: n[f] for f in HOISTED_FIELDS.get(node_type, []) if f in n}
 
-    # Disallow overlap (ambiguous - is it IO or internal?).
-    overlap = set(internal) & set(hoisted)
-    if overlap:
-        raise DifyCliError(
-            f"node {n.get('id')!r}: fields {sorted(overlap)} appear in both @file and spec top-level. "
-            f"Hoisted IO fields ({sorted(hoisted)}) must not be in @file."
-        )
+    # If @file accidentally includes a hoisted field, just drop it -
+    # the spec value takes precedence. No error (agents don't always
+    # track which fields are hoisted vs internal).
+    for f in list(internal):
+        if f in hoisted:
+            del internal[f]
 
     return _resolve_atfile_strings({**internal, **hoisted})
 

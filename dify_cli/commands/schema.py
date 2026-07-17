@@ -24,10 +24,23 @@ def node(
     """
     ver = dsl_version or _latest_version()
     schema = get_node_schema(ver, node_type)
+    from ..core.spec_format import HOISTED_FIELDS
+    hoisted = set(HOISTED_FIELDS.get(node_type, []))
     if required_only:
-        typer.echo(json.dumps(schema.get("required", []), indent=2))
+        # Exclude hoisted fields - they live at the spec layer, not in @file.
+        required = [f for f in schema.get("required", []) if f not in hoisted]
+        typer.echo(json.dumps(required, indent=2))
     else:
-        typer.echo(json.dumps(schema, indent=2, ensure_ascii=False))
+        # Strip hoisted fields from properties so the agent only sees
+        # internal config fields (what goes in @file).
+        import copy
+        filtered = copy.deepcopy(schema)
+        props = filtered.get("properties", {})
+        for f in hoisted:
+            props.pop(f, None)
+        if "required" in filtered:
+            filtered["required"] = [f for f in filtered["required"] if f not in hoisted]
+        typer.echo(json.dumps(filtered, indent=2, ensure_ascii=False))
 
 
 @app.command("types")
