@@ -24,6 +24,7 @@ HOISTED_FIELDS: dict[str, list[str]] = {
     "knowledge-retrieval": ["query_variable_selector"],
     "question-classifier": ["query_variable_selector"],
     "parameter-extractor": ["parameters", "query"],
+    "document-extractor": ["variable_selector"],
 }
 
 # Spec-layer metadata fields that apply/spec_validator ignore. They carry

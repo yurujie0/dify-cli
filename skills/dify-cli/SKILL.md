@@ -7,7 +7,9 @@ description: Build Dify DSL (workflow / chatflow) YAML files declaratively. Use 
 
 `dify-cli` is a command-line tool for authoring Dify DSL YAML files **declaratively**: you write a spec (the single source of truth), validate it, and `apply` generates the DSL. Edits go back through the spec + re-apply, not by mutating the DSL directly.
 
-The CLI is **schema-driven**: node field definitions are loaded from pre-generated JSON Schema bundles keyed by DSL version (`dify_cli/schemas/v<ver>.json` + `defaults-v<ver>.json`). When Dify upgrades the DSL, only a new schema bundle needs to be regenerated - the CLI code itself does not change.
+The CLI is **schema-driven**: node field definitions are loaded from pre-generated JSON Schema bundles keyed by DSL version. When Dify upgrades the DSL, only a new schema bundle needs to be regenerated - the CLI code itself does not change.
+
+**dify-cli is pre-installed.** If `dify-cli` is not on PATH, run via module: `python -m dify_cli.main version`.
 
 **For how to write `spec.json` (format, node fields, variable model, examples), see [SPEC.md](SPEC.md).** This file covers the CLI commands and workflow.
 
@@ -36,8 +38,6 @@ The spec is the single source of truth. Never hand-edit the generated DSL.
 
 ## When to use
 
-Use this skill when the user asks to:
-
 - **Build a workflow/chatflow as code** - "create a workflow", "generate a chatflow"
 - **Generate Dify DSL programmatically** - from a design doc or template
 - **Validate a DSL before importing** - "check this DSL file is valid"
@@ -48,43 +48,21 @@ Use this skill when the user asks to:
 ```bash
 dify-cli --version        # CLI version
 dify-cli node types       # list all node types in the bundled schema (no DSL file needed)
-dify-cli schema types     # same, via the schema subcommand
 ```
-
-## Installation
-
-The CLI lives at `cli/` in the dify repo. For development use:
-
-```bash
-cd cli
-pip install -e ".[dev]"
-```
-
-Requires Python >= 3.11. Dependencies: `typer`, `pyyaml`, `jsonschema`, `rich`.
-
-Verify installation:
-
-```bash
-dify-cli version
-# dify-cli 0.1.0
-# Bundled DSL schemas: 0.5.0
-```
-
-If `dify-cli` is not on PATH, run via module: `python -m dify_cli.main version`.
 
 ## Architecture (important for understanding behavior)
 
 Each node built by this CLI is constructed in **three layers**, from bottom to top:
 
-1. **Frontend `defaultValue` template** (`dify_cli/schemas/defaults-v<ver>.json`) - the exact `data` object the Dify web UI seeds when a user clicks "add node". This guarantees the resulting DSL imports cleanly (the frontend has no null guards on many optional fields, so they must be present). Example: an LLM node always gets `model.completion_params.temperature: 0.7`, `prompt_template: [{role: 'system', text: ''}]`, `context.enabled: false`, `vision.enabled: false`.
+1. **Frontend `defaultValue` template** (`dify_cli/schemas/defaults-v<ver>.json`) - the exact `data` object the Dify web UI seeds when a user clicks "add node". This guarantees the resulting DSL imports cleanly (the frontend has no null guards on many optional fields, so they must be present).
 
 2. **Spec field overrides** - the `fields` dict in the spec, deep-merged over the template. Example: `{"model": {"name": "gpt-4o"}}` only overrides `name`, preserving other defaults.
 
-3. **Backend JSON Schema validation** (`dify_cli/schemas/v<ver>.json`) - reflected from Dify's Pydantic `*NodeData` models. The CLI validates the final node data against this before writing, catching invalid enum values, missing required fields, etc.
+3. **Backend JSON Schema validation** (`dify_cli/schemas/v<ver>.json`) - reflected from Dify's Pydantic `*NodeData` models. The CLI validates the final node data against this before writing.
 
 Node graph structure (top-level `type`, `positionAbsolute`, `width`, `height`, `sourcePosition`, `targetPosition`, edge `data.{sourceType,targetType,isInIteration,isInLoop}`, `zIndex`) matches what the frontend expects on import - this is non-negotiable for avoiding "client-side exception" errors.
 
-## Command reference
+## Command reference (core workflow)
 
 ### `dify-cli apply` - generate a complete DSL from a spec
 
@@ -110,13 +88,15 @@ Validates a spec's **variable references and scope** - the semantic rules the JS
 3. Fix the spec -> re-validate until `OK spec is valid`
 4. `dify-cli apply --spec spec.json -f dsl.yaml --force` -> generate the DSL
 
-The validator is the single source of truth for variable semantics - see the "Variable model" section in [SPEC.md](SPEC.md) for what each node type exposes. Common errors:
+The validator is the single source of truth for variable semantics - see the "Variable model" section in [SPEC.md](SPEC.md).
 
+### `dify-cli node check` - check a single node's internal config (implementation stage)
+
+```bash
+dify-cli node check <node_id> --spec spec.json --fields <file>
 ```
-FAIL end.fields.outputs[0].value_selector: node 'loop' (loop) does not expose variable 'counter'. Exposes: (none).
-     -> define loop_variables on the loop, or reference an existing variable.
-FAIL end.fields.outputs[0].value_selector: cannot reference 'loopbody' from here - it is inside container 'loop'. Reference the container node instead.
-```
+
+Used in the implementation stage: a sub-agent fills a node's `@file` (internal config), then runs this to verify the merged node data (hoisted IO from spec + internal config) passes backend schema validation, and that template variable references (`{{#node.var#}}`) in the config point to valid in-scope nodes. See [SPEC.md](SPEC.md).
 
 ### `dify-cli validate` - full DSL validation
 
@@ -134,7 +114,6 @@ Run this after `apply` as a final check before importing into Dify.
 ### `dify-cli schema` - inspect node schemas
 
 ```bash
-dify-cli schema types                          # list all node types
 dify-cli schema node <type>                    # full JSON Schema for a node's data
 dify-cli schema node <type> --required-only    # just the required field names
 dify-cli schema enum <type> <field>            # allowed values for an enum field
@@ -142,40 +121,21 @@ dify-cli schema enum <type> <field>            # allowed values for an enum fiel
 
 Use this to discover which fields a node requires and what enum values are accepted - works on any installed dify-cli, no source access needed.
 
-### `dify-cli node` - inspect nodes + check single-node config
+### `dify-cli node types`
 
 ```bash
-dify-cli node list [--file dsl.yaml]           # list nodes (id, type, title)
-dify-cli node show <node_id> [--file dsl.yaml] # show one node's full JSON
-dify-cli node types [--file dsl.yaml]          # list node types in the schema
-dify-cli node check <node_id> --spec spec.json --fields <file>  # implementation-stage check
+dify-cli node types   # list all node types in the bundled schema (no DSL file needed)
 ```
 
-`node check` is used in the implementation stage: a sub-agent fills a node's `@file` (internal config), then runs this to verify the merged node data (hoisted IO from spec + internal config) passes backend schema validation, and that template variable references (`{{#node.var#}}`) in the config point to valid in-scope nodes. See [SPEC.md](SPEC.md).
-
-Structural commands (`node add`/`remove`/`edit`) are removed - declare nodes in the spec and use `apply`.
-
-### `dify-cli edge` - inspect edges (read-only)
+### `dify-cli --version`
 
 ```bash
-dify-cli edge list [--file dsl.yaml]
+dify-cli --version   # CLI version
 ```
 
-`edge add`/`edge remove` are removed - declare edges in the spec.
+## Inspection commands (read-only, less common)
 
-### `dify-cli var` - inspect variables (read-only)
-
-```bash
-dify-cli var env list [--file dsl.yaml]
-dify-cli var env get <name> [--file dsl.yaml]
-dify-cli var conversation list [--file dsl.yaml]
-```
-
-`var ... set/remove` are removed - declare environment/conversation variables in the spec.
-
-### `dify-cli version`
-
-Prints CLI version and bundled DSL schema versions.
+For commands to inspect a generated DSL (`node list`, `node show`, `edge list`, `var env list`, etc.), see [references/inspection-commands.md](references/inspection-commands.md).
 
 ## Agent-framework URL blocking (mostly N/A)
 
@@ -187,7 +147,7 @@ The CLI only writes the YAML file. To import:
 
 1. Open Dify web UI -> Create app -> Import DSL
 2. Upload the generated `dsl.yaml`
-3. The DSL version must be <= the Dify instance's `CURRENT_DSL_VERSION` (check via `dify-cli version`)
+3. The DSL version must be <= the Dify instance's `CURRENT_DSL_VERSION` (check via `dify-cli --version`)
 
 If import fails with "client-side exception", run `dify-cli validate` first, and ensure the frontend defaults bundle matches the Dify version (regenerate via the extract script if needed).
 
@@ -216,8 +176,6 @@ npm install --no-save typescript esbuild
 node scripts/extract_defaults.mjs dify_cli/schemas/defaults-v<NEW_VER>.json <NEW_VER>
 ```
 
-The defaults extractor statically parses each `web/app/components/workflow/nodes/<type>/default.ts` with the TypeScript compiler API and evaluates the `defaultValue` object literal - no runtime imports of the web codebase.
-
 After regeneration, the CLI automatically picks up the new version via `dify_cli/schemas/` filename - no code changes needed.
 
 ## Troubleshooting
@@ -236,10 +194,10 @@ After regeneration, the CLI automatically picks up the new version via `dify_cli
 - `cli/dify_cli/commands/apply.py` - declarative spec -> DSL generation
 - `cli/dify_cli/commands/spec.py` - `spec validate` command
 - `cli/dify_cli/core/spec_validator.py` - variable reference + scope validation
-- `cli/dify_cli/core/node_builder.py` - three-layer node construction (frontend defaults + fields + schema validation)
-- `cli/dify_cli/core/dsl.py` - DSL load/save
-- `cli/dify_cli/core/schema_store.py` - loads `v<ver>.json` and `defaults-v<ver>.json` by DSL version
+- `cli/dify_cli/core/spec_format.py` - hoisted fields mapping
+- `cli/dify_cli/core/node_builder.py` - three-layer node construction
 - `cli/dify_cli/schemas/` - bundled JSON Schema + frontend defaults per DSL version
-- `cli/SPEC.md` - spec authoring guide (format, node fields, variable model, examples)
+- `skills/dify-cli/SPEC.md` - spec authoring guide (format, node fields, variable model, examples)
+- `skills/dify-cli/references/inspection-commands.md` - read-only inspection commands
 - `cli/scripts/extract_schemas.py` - backend Pydantic reflection (run in api env)
 - `cli/scripts/extract_defaults.mjs` - frontend AST extraction (run with node + typescript)
