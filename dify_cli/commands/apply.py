@@ -291,16 +291,20 @@ def _build_variables(doc, spec_data: dict) -> None:
     Env var values support @file (for URLs blocked by agent frameworks).
     """
     from ..core.node_builder import parse_field_value
+    # Common agent mistake: "text" (a start variable type) instead of "string".
+    _VAR_TYPE_NORMALIZE = {"text": "string"}
     for ev in spec_data.get("environment_variables", []) or []:
+        vt = _VAR_TYPE_NORMALIZE.get(ev.get("value_type", "string"), ev.get("value_type", "string"))
         doc.environment_variables.append({
             "name": ev["name"],
             "value": parse_field_value(ev["value"]) if isinstance(ev["value"], str) else ev["value"],
-            "value_type": ev.get("value_type", "string"),
+            "value_type": vt,
         })
     for cv in spec_data.get("conversation_variables", []) or []:
+        vt = _VAR_TYPE_NORMALIZE.get(cv.get("value_type", "string"), cv.get("value_type", "string"))
         doc.conversation_variables.append({
             "name": cv["name"],
-            "value_type": cv.get("value_type", "string"),
+            "value_type": vt,
             "value": cv.get("value"),
             "description": cv.get("description", ""),
         })

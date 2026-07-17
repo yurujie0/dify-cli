@@ -31,6 +31,11 @@ HOISTED_FIELDS: dict[str, list[str]] = {
 # design-stage info (IO contract schema, implementation hints for sub-agents).
 IGNORED_SPEC_FIELDS = {"_output_schema", "implementation_hint"}
 
+# Node types whose required fields are ALL hoisted (or have frontend defaults).
+# These can have `fields: {}` at design stage. All other node types need an
+# @file reference for their internal config (code, model, prompt_template, etc.).
+NODES_WITHOUT_INTERNAL_CONFIG = {"start", "end", "iteration", "loop", "document-extractor"}
+
 
 def hoisted_fields_for(node_type: str) -> list[str]:
     return HOISTED_FIELDS.get(node_type, [])

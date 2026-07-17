@@ -64,6 +64,80 @@ def validate_spec(spec: dict[str, Any]) -> list[str]:
     for node in flat:
         for path, selector in _extract_references(node):
             errors.extend(_check_reference(node, path, selector, nodes_by_id))
+
+    errors.extend(_check_variables(spec))
+    errors.extend(_check_fields_refs(spec))
+    return errors
+
+
+# Valid value_type for environment/conversation variables (SegmentType subset).
+# Agents sometimes write "text" (a start variable type) instead of "string".
+_VALID_VAR_VALUE_TYPES = {
+    "string", "number", "integer", "float", "object", "secret",
+    "boolean", "array[any]", "array[string]", "array[number]",
+    "array[object]", "array[boolean]", "array[file]", "file", "none",
+}
+
+
+def _check_variables(spec: dict[str, Any]) -> list[str]:
+    """Check environment/conversation variable value_type is valid."""
+    errors: list[str] = []
+    for ev in spec.get("environment_variables", []) or []:
+        vt = ev.get("value_type", "string")
+        if vt not in _VALID_VAR_VALUE_TYPES:
+            errors.append(
+                f"environment_variable {ev.get('name', '?')!r}: value_type {vt!r} is not valid. "
+                f"Use 'string' (not 'text'). Valid: {sorted(_VALID_VAR_VALUE_TYPES)}"
+            )
+    for cv in spec.get("conversation_variables", []) or []:
+        vt = cv.get("value_type", "string")
+        if vt not in _VALID_VAR_VALUE_TYPES:
+            errors.append(
+                f"conversation_variable {cv.get('name', '?')!r}: value_type {vt!r} is not valid. "
+                f"Use 'string' (not 'text'). Valid: {sorted(_VALID_VAR_VALUE_TYPES)}"
+            )
+    return errors
+
+
+def _check_fields_refs(spec: dict[str, Any]) -> list[str]:
+    """Check that nodes requiring internal config have an @file reference in
+    `fields`. Nodes whose required fields are all hoisted (start/end/iter/loop/
+    document-extractor) may have `fields: {}`."""
+    from .spec_format import NODES_WITHOUT_INTERNAL_CONFIG
+    errors: list[str] = []
+    for n in spec.get("nodes", []) or []:
+        if not isinstance(n, dict):
+            continue
+        ntype = n.get("type", "")
+        if ntype in NODES_WITHOUT_INTERNAL_CONFIG:
+            continue
+        fields = n.get("fields")
+        nid = n.get("id", "?")
+        if fields is None or (isinstance(fields, dict) and not fields):
+            errors.append(
+                f"node {nid!r} ({ntype}): 'fields' must be an @file reference "
+                f"(e.g. \"fields\": \"@/tmp/impl/{nid}.json\") for its internal config "
+                f"(code/model/prompt_template/etc). Got empty."
+            )
+        elif isinstance(fields, str) and not fields.startswith("@"):
+            errors.append(
+                f"node {nid!r} ({ntype}): 'fields' string must start with @ "
+                f"(file reference). Got {fields!r}."
+            )
+        # Recurse into children
+        for child in n.get("children", []) or []:
+            if not isinstance(child, dict):
+                continue
+            ctype = child.get("type", "")
+            if ctype in NODES_WITHOUT_INTERNAL_CONFIG:
+                continue
+            cfields = child.get("fields")
+            cid = child.get("id", "?")
+            if cfields is None or (isinstance(cfields, dict) and not cfields):
+                errors.append(
+                    f"node {cid!r} ({ctype}): 'fields' must be an @file reference "
+                    f"for its internal config. Got empty."
+                )
     return errors
 
 
