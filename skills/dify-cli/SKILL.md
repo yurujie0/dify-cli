@@ -141,63 +141,12 @@ For commands to inspect a generated DSL (`node list`, `node show`, `edge list`, 
 
 Agent frameworks (nanobot) block commands whose arguments contain `https://` or `http://`. In the declarative workflow this is rarely an issue: URLs live inside the spec file (written via `write_file`), and `dify-cli apply --spec spec.json` only puts the file path on the command line - no URL in the args. So **just put URLs directly in the spec** (or in an `@file` referenced by the spec); do not pass them as command arguments.
 
-## Importing into Dify
-
-The CLI only writes the YAML file. To import:
-
-1. Open Dify web UI -> Create app -> Import DSL
-2. Upload the generated `dsl.yaml`
-3. The DSL version must be <= the Dify instance's `CURRENT_DSL_VERSION` (check via `dify-cli --version`)
-
-If import fails with "client-side exception", run `dify-cli validate` first, and ensure the frontend defaults bundle matches the Dify version (regenerate via the extract script if needed).
-
-## Regenerating schemas after a Dify upgrade
-
-When Dify bumps `CURRENT_DSL_VERSION` (in `api/services/app_dsl_service.py`), regenerate both bundles:
-
-### Backend schema (Pydantic reflection)
-
-Requires a working `dify-api` environment:
-
-```bash
-cd api
-PYTHONPATH=$PWD uv run --project api python \
-  ../cli/scripts/extract_schemas.py \
-  --out ../cli/dify_cli/schemas/v<NEW_VER>.json
-```
-
-### Frontend defaults (AST extraction)
-
-Requires `typescript` and `esbuild` (zero other web deps):
-
-```bash
-cd cli
-npm install --no-save typescript esbuild
-node scripts/extract_defaults.mjs dify_cli/schemas/defaults-v<NEW_VER>.json <NEW_VER>
-```
-
-After regeneration, the CLI automatically picks up the new version via `dify_cli/schemas/` filename - no code changes needed.
-
 ## Troubleshooting
 
-**"No schema bundle for DSL version X"** - the `v<ver>.json` file is missing in `dify_cli/schemas/`. Run the extractors above or fall back to a supported version.
+**"No schema bundle for DSL version X"** - the `v<ver>.json` file is missing in `dify_cli/schemas/`. Fall back to a supported version, or see the project README to regenerate.
 
 **"Validation failed for node type 'llm' at model.mode: ..."** - the backend schema rejected a value. Fix the spec field. Run `dify-cli schema node <type>` to see the allowed values.
 
 **spec validate reports invalid variable references** - see the "Variable model" section in [SPEC.md](SPEC.md). Common fixes: define `loop_variables` on loop nodes, reference container `output` (not inner nodes) from outside, use `variable_selector` (not `variable`) in if-else conditions.
 
-**Import fails with "client-side exception"** - a node is missing a field the frontend expects without null-guarding. Confirm `dify-cli validate` passes, ensure the frontend defaults bundle (`defaults-v<ver>.json`) is present and was regenerated against the same Dify version.
-
-## Key files
-
-- `cli/dify_cli/main.py` - Typer app, command registration
-- `cli/dify_cli/commands/apply.py` - declarative spec -> DSL generation
-- `cli/dify_cli/commands/spec.py` - `spec validate` command
-- `cli/dify_cli/core/spec_validator.py` - variable reference + scope validation
-- `cli/dify_cli/core/spec_format.py` - hoisted fields mapping
-- `cli/dify_cli/core/node_builder.py` - three-layer node construction
-- `cli/dify_cli/schemas/` - bundled JSON Schema + frontend defaults per DSL version
-- `skills/dify-cli/SPEC.md` - spec authoring guide (format, node fields, variable model, examples)
-- `skills/dify-cli/references/inspection-commands.md` - read-only inspection commands
-- `cli/scripts/extract_schemas.py` - backend Pydantic reflection (run in api env)
-- `cli/scripts/extract_defaults.mjs` - frontend AST extraction (run with node + typescript)
+**Import fails with "client-side exception"** - a node is missing a field the frontend expects without null-guarding. Confirm `dify-cli validate` passes. If the frontend defaults bundle is stale, see the project README to regenerate it.
