@@ -11,13 +11,13 @@ The CLI is **schema-driven**: node field definitions are loaded from pre-generat
 
 **dify-cli is pre-installed.** If `dify-cli` is not on PATH, run via module: `python -m dify_cli.main version`.
 
-**For how to write `spec.json` (format, node fields, variable model, examples), see [SPEC.md](SPEC.md).** This file covers the CLI commands and workflow.
+**For how to write `spec.json` (format, node fields, variable model, examples), see [spec-author-guide.md](references/spec-author-guide.md).** This file covers the CLI commands and workflow.
 
 ## Primary workflow (two-phase)
 
 **Design stage** (structure + IO contracts):
 ```
-1. author spec.json        (nodes, hoisted IO/dependencies, @file refs; see SPEC.md)
+1. author spec.json        (nodes, hoisted IO/dependencies, @file refs; see references/spec-author-guide.md)
 2. dify-cli spec validate  (structure check: node types, variable refs, scope, edges)
 ```
 
@@ -72,7 +72,7 @@ dify-cli apply --spec spec.json [--file dsl.yaml] [--force]
 
 Generates the ENTIRE workflow from one spec file - nodes, edges, env/conversation variables - in a single command. Re-running `apply` with an edited spec regenerates the DSL deterministically (same spec -> byte-identical output). Defensively runs `spec validate` first; on invalid references it reports errors and exits without generating.
 
-**Spec format**: see [SPEC.md](SPEC.md).
+**Spec format**: see [spec-author-guide.md](references/spec-author-guide.md).
 
 ### `dify-cli spec validate` - check a spec before applying (design stage)
 
@@ -83,12 +83,12 @@ dify-cli spec validate --spec spec.json
 Validates a spec's **variable references and scope** - the semantic rules the JSON schema can't express: every `value_selector`/`variable_selector` must point to a variable the target node actually exposes, and you can't reference a node inside an iteration/loop container from outside it. Run this in the design stage and fix errors BEFORE `apply`.
 
 **Design-stage workflow**:
-1. Analyze the requirement -> author `spec.json` (see [SPEC.md](SPEC.md))
+1. Analyze the requirement -> author `spec.json` (see [spec-author-guide.md](references/spec-author-guide.md))
 2. `dify-cli spec validate --spec spec.json` -> read the errors
 3. Fix the spec -> re-validate until `OK spec is valid`
 4. `dify-cli apply --spec spec.json -f dsl.yaml --force` -> generate the DSL
 
-The validator is the single source of truth for variable semantics - see the "Variable model" section in [SPEC.md](SPEC.md).
+The validator is the single source of truth for variable semantics - see the "Variable model" section in [spec-author-guide.md](references/spec-author-guide.md).
 
 ### `dify-cli node check` - check a single node's internal config (implementation stage)
 
@@ -96,7 +96,7 @@ The validator is the single source of truth for variable semantics - see the "Va
 dify-cli node check <node_id> --spec spec.json --fields <file>
 ```
 
-Used in the implementation stage: a sub-agent fills a node's `@file` (internal config), then runs this to verify the merged node data (hoisted IO from spec + internal config) passes backend schema validation, and that template variable references (`{{#node.var#}}`) in the config point to valid in-scope nodes. See [SPEC.md](SPEC.md).
+Used in the implementation stage: a sub-agent fills a node's `@file` (internal config), then runs this to verify the merged node data (hoisted IO from spec + internal config) passes backend schema validation, and that template variable references (`{{#node.var#}}`) in the config point to valid in-scope nodes. See [spec-author-guide.md](references/spec-author-guide.md).
 
 ### `dify-cli validate` - full DSL validation
 
@@ -143,10 +143,6 @@ Agent frameworks (nanobot) block commands whose arguments contain `https://` or 
 
 ## Troubleshooting
 
-**"No schema bundle for DSL version X"** - the `v<ver>.json` file is missing in `dify_cli/schemas/`. Fall back to a supported version, or see the project README to regenerate.
-
 **"Validation failed for node type 'llm' at model.mode: ..."** - the backend schema rejected a value. Fix the spec field. Run `dify-cli schema node <type>` to see the allowed values.
 
-**spec validate reports invalid variable references** - see the "Variable model" section in [SPEC.md](SPEC.md). Common fixes: define `loop_variables` on loop nodes, reference container `output` (not inner nodes) from outside, use `variable_selector` (not `variable`) in if-else conditions.
-
-**Import fails with "client-side exception"** - a node is missing a field the frontend expects without null-guarding. Confirm `dify-cli validate` passes. If the frontend defaults bundle is stale, see the project README to regenerate it.
+**spec validate reports invalid variable references** - see the "Variable model" section in [spec-author-guide.md](references/spec-author-guide.md). Common fixes: define `loop_variables` on loop nodes, reference container `output` (not inner nodes) from outside, use `variable_selector` (not `variable`) in if-else conditions.

@@ -1,6 +1,6 @@
 # Workflow Spec Authoring Guide
 
-This document describes how to author `spec.json` for the two-phase workflow: **design stage** writes the spec (structure + IO contracts + dependencies), **implementation stage** fills each node's internal config (`@file`). See [SKILL.md](SKILL.md) for CLI commands.
+This document describes how to author `spec.json` for the two-phase workflow: **design stage** writes the spec (structure + IO contracts + dependencies), **implementation stage** fills each node's internal config (`@file`).
 
 ## Two-phase model
 
