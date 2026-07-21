@@ -23,7 +23,6 @@ _SELECTOR_FIELDS = {
     "code": ["variables.*.value_selector"],
     "end": ["outputs.*.value_selector"],
     "template-transform": ["variables.*.value_selector"],
-    "llm": ["context.variable_selector"],
     "if-else": ["cases.*.conditions.*.variable_selector"],
     "iteration": ["iterator_selector", "output_selector"],
     "loop": ["break_conditions.*.variable_selector", "loop_variables.*.value_selector"],

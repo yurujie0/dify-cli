@@ -18,7 +18,7 @@ HOISTED_FIELDS: dict[str, list[str]] = {
     "start": ["variables"],
     "code": ["variables", "outputs"],
     "end": ["outputs"],
-    "llm": ["context"],
+    "llm": [],
     "if-else": ["cases"],
     "iteration": ["iterator_selector", "output_selector"],
     "loop": ["loop_variables", "break_conditions"],
