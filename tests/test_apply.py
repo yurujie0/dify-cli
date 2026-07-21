@@ -19,7 +19,6 @@ def _write_spec(tmp_path: Path, spec: dict, name: str = "spec.json") -> Path:
 
 
 def _write_impl(spec_path: Path, node_id: str, data: dict) -> Path:
-    """Write an impl file at the convention-based path."""
     from dify_cli.core.spec_format import impl_file_for
     impl_path = impl_file_for(spec_path, node_id)
     impl_path.parent.mkdir(parents=True, exist_ok=True)
@@ -75,7 +74,6 @@ def test_apply_impl_file_for_code(tmp_path):
 
 
 def test_apply_impl_dir_derived_from_spec_name(tmp_path):
-    """mitr_spec.json -> mitr_impl/ directory."""
     spec = {
         "mode": "workflow", "name": "T", "dsl_version": DSL_VERSION,
         "nodes": [
@@ -87,7 +85,6 @@ def test_apply_impl_dir_derived_from_spec_name(tmp_path):
         "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "end"}],
     }
     spec_path = _write_spec(tmp_path, spec, name="mitr_spec.json")
-    # impl goes to mitr_impl/code.json (not impl/code.json)
     _write_impl(spec_path, "code", {"code_language": "python3", "code": "def main(): return {}"})
     assert (tmp_path / "mitr_impl" / "code.json").exists()
     assert not (tmp_path / "impl" / "code.json").exists()
@@ -101,11 +98,10 @@ def test_apply_iteration_with_children(tmp_path):
              "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
             {"id": "iter", "type": "iteration", "title": "Loop",
              "iterator_selector": ["start", "q"], "output_selector": ["inner", "out"],
-             "children": [
-                {"id": "inner", "type": "code", "title": "Inner",
-                 "variables": [{"variable": "item", "value_selector": ["iter", "item"]}],
-                 "outputs": {"out": {"type": "string"}}},
-            ]},
+             "children": ["inner"]},
+            {"id": "inner", "type": "code", "title": "Inner",
+             "variables": [{"variable": "item", "value_selector": ["iter", "item"]}],
+             "outputs": {"out": {"type": "string"}}},
             {"id": "end", "type": "end", "title": "End", "outputs": []},
         ],
         "edges": [{"source": "start", "target": "iter"}, {"source": "iter", "target": "end"}],
@@ -165,7 +161,6 @@ def test_apply_rejects_duplicate_node_id(tmp_path):
 
 
 def test_apply_missing_impl_file_errors(tmp_path):
-    """A node needing impl but no impl file -> clear error with path."""
     spec = {
         "mode": "workflow", "name": "T", "dsl_version": DSL_VERSION,
         "nodes": [
@@ -182,3 +177,23 @@ def test_apply_missing_impl_file_errors(tmp_path):
         apply_cmd(spec=spec_path, file=out, force=True)
     assert "implementation file not found" in str(exc.value)
     assert "impl/code.json" in str(exc.value)
+
+
+def test_apply_child_not_in_nodes_errors(tmp_path):
+    """Iteration references a child id that doesn't exist -> error."""
+    spec = {
+        "mode": "workflow", "name": "T", "dsl_version": DSL_VERSION,
+        "nodes": [
+            {"id": "start", "type": "start", "title": "Start",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "iter", "type": "iteration", "title": "Loop",
+             "iterator_selector": ["start", "q"], "output_selector": ["missing", "out"],
+             "children": ["missing"]},
+            {"id": "end", "type": "end", "title": "End", "outputs": []},
+        ],
+        "edges": [{"source": "start", "target": "iter"}, {"source": "iter", "target": "end"}],
+    }
+    spec_path = _write_spec(tmp_path, spec)
+    out = tmp_path / "dsl.yaml"
+    with pytest.raises(Exception):
+        apply_cmd(spec=spec_path, file=out, force=True)

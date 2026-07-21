@@ -158,10 +158,25 @@ def _resolve_atfile_strings(obj):
 
 
 def _build_nodes(doc, nodes: list, dsl_version: str, spec_path) -> None:
+    # Index all nodes by id (children are now top-level, referenced by id).
+    nodes_by_id = {n["id"]: n for n in nodes if isinstance(n, dict) and "id" in n}
+
+    # Collect all child ids so we can skip them at the top level.
+    child_ids: set[str] = set()
+    for n in nodes:
+        if isinstance(n, dict) and n.get("type") in ("iteration", "loop"):
+            for cid in n.get("children", []):
+                child_ids.add(cid)
+
     top_index = 0
     for n in nodes:
         if not isinstance(n, dict) or "id" not in n or "type" not in n:
             raise DifyCliError(f"Each node must have 'id' and 'type'; got {n!r}")
+
+        # Skip child nodes here - they're built when their parent is processed.
+        if n["id"] in child_ids:
+            continue
+
         node = build_node(
             node_type=n["type"],
             dsl_version=dsl_version,
@@ -178,9 +193,12 @@ def _build_nodes(doc, nodes: list, dsl_version: str, spec_path) -> None:
         if n["type"] in ("iteration", "loop"):
             start_node = create_container_start(node, n["type"], dsl_version)
             graph_mod.add_node(doc, start_node)
-            for child in n.get("children", []):
-                if not isinstance(child, dict) or "id" not in child or "type" not in child:
-                    raise DifyCliError(f"Each child node must have 'id' and 'type'; got {child!r}")
+            for child_id in n.get("children", []):
+                child = nodes_by_id.get(child_id)
+                if child is None:
+                    raise DifyCliError(
+                        f"node {n['id']!r} ({n['type']}): child {child_id!r} not found in spec.nodes"
+                    )
                 cnode = build_node(
                     node_type=child["type"],
                     dsl_version=dsl_version,

@@ -161,16 +161,18 @@ def check(
     from ..core.spec_validator import _walk_all_strings, _extract_template_refs, _exposed_vars, _in_scope
 
     spec_data = _json.loads(spec.read_text(encoding="utf-8"))
-    # Flatten spec nodes (including children) to find the target.
-    flat = []
+    # Build node index and assign parentId to children (children are top-level).
+    nodes_by_id = {}
     for n in spec_data.get("nodes", []):
-        flat.append(n)
-        if n.get("type") in ("iteration", "loop"):
-            for child in n.get("children", []):
-                child = dict(child)
-                child["_parentId"] = n["id"]
-                flat.append(child)
-    target_spec = next((n for n in flat if n.get("id") == node_id), None)
+        if isinstance(n, dict) and "id" in n:
+            nodes_by_id[n["id"]] = n
+    for n in spec_data.get("nodes", []):
+        if isinstance(n, dict) and n.get("type") in ("iteration", "loop"):
+            for child_id in n.get("children", []):
+                child = nodes_by_id.get(child_id)
+                if child is not None:
+                    child["_parentId"] = n["id"]
+    target_spec = nodes_by_id.get(node_id)
     if target_spec is None:
         raise DifyCliError(f"Node {node_id!r} not found in spec {spec}")
     ntype = target_spec.get("type", "")
@@ -198,7 +200,6 @@ def check(
             del internal[f]
     merged = {**internal, **hoisted}
 
-    nodes_by_id = {n["id"]: n for n in flat}
     ver = dsl_version or spec_data.get("dsl_version") or "0.5.0"
 
     errors: list[str] = []

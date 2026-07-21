@@ -49,18 +49,22 @@ def validate_spec(spec: dict[str, Any]) -> list[str]:
     if not isinstance(nodes, list):
         return ["spec.nodes must be a list"]
 
-    # Flatten nodes (including iteration/loop children) with their parentId.
-    flat: list[dict[str, Any]] = []
+    # Build node index and assign parentId to children (children are now
+    # top-level, referenced by id in the parent's `children` list).
+    nodes_by_id = {n["id"]: n for n in nodes if isinstance(n, dict) and "id" in n}
     for n in nodes:
-        flat.append(n)
+        if not isinstance(n, dict):
+            continue
         if n.get("type") in ("iteration", "loop"):
-            for child in n.get("children", []):
-                child["_parentId"] = n["id"]
-                flat.append(child)
-    nodes_by_id = {n["id"]: n for n in flat}
+            for child_id in n.get("children", []):
+                child = nodes_by_id.get(child_id)
+                if child is not None:
+                    child["_parentId"] = n["id"]
 
     errors: list[str] = []
-    for node in flat:
+    for node in nodes:
+        if not isinstance(node, dict):
+            continue
         for path, selector in _extract_references(node):
             errors.extend(_check_reference(node, path, selector, nodes_by_id))
 
@@ -120,9 +124,17 @@ def _check_node_ids(spec: dict[str, Any]) -> list[str]:
         if not isinstance(n, dict):
             continue
         _check(n.get("id", ""), n.get("type", ""))
-        for child in n.get("children", []) or []:
-            if isinstance(child, dict):
-                _check(child.get("id", ""), child.get("type", ""))
+
+    # Check that children references point to existing nodes.
+    nodes_by_id = {n.get("id"): n for n in spec.get("nodes", []) or [] if isinstance(n, dict)}
+    for n in spec.get("nodes", []) or []:
+        if not isinstance(n, dict) or n.get("type") not in ("iteration", "loop"):
+            continue
+        for child_id in n.get("children", []) or []:
+            if child_id not in nodes_by_id:
+                errors.append(
+                    f"node {n.get('id', '?')!r}: child {child_id!r} not found in spec.nodes"
+                )
     return errors
 
 

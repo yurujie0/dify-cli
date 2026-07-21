@@ -54,12 +54,14 @@ Examples:
       "id": "iter", "type": "iteration", "title": "Loop",
       "iterator_selector": ["code", "items"],
       "output_selector": ["inner", "upper"],
-      "children": [
-        {"id": "inner", "type": "code", "title": "Upper",
-         "variables": [{"variable": "item", "value_selector": ["iter", "item"]}],
-         "outputs": {"upper": {"type": "string"}},
-         "implementation_hint": "对每个 item 做大写转换"}
-      ]
+      "children": ["inner"]
+    },
+    {
+      "id": "inner", "type": "code", "title": "Upper",
+      "variables": [{"variable": "item", "value_selector": ["iter", "item"]}],
+      "outputs": {"upper": {"type": "string"}},
+      "implementation_hint": "对每个 item 做大写转换"
+    },
     },
     {
       "id": "end", "type": "end", "title": "End",
@@ -95,7 +97,7 @@ Note: `start`/`end`/`iter` don't have `implementation_hint` (they don't need imp
 - **Hoisted IO/dependency fields** (per node type, see table below) - contain variable selectors or IO declarations, visible to `spec validate`
 - `_output_schema` (optional): IO contract schema with field structure (apply ignores; for future test generation)
 - `implementation_hint` (optional): natural-language description of what the node should do. Only for nodes that need impl files (code/llm/http/etc). apply ignores it; the implementation sub-agent reads it.
-- `children` (iteration/loop only): nodes inside the container
+- `children` (iteration/loop only): list of child node **ids** (strings). Child nodes are defined at the same level as other nodes in `spec.nodes`, not nested.
 
 ### Hoisted fields per node type
 
@@ -186,7 +188,7 @@ When unsure about a field's shape, run `dify-cli schema node <type>` (hoisted fi
 
 **code `code_language`** accepts only `python3` or `javascript` (NOT `python`; auto-corrected). (impl)
 
-**iteration** requires `iterator_selector` + `output_selector` (hoisted). iteration-start child auto-created by apply - do NOT list it. Inner nodes in `children` reference `[<iter_id>, "item"]`.
+**iteration** requires `iterator_selector` + `output_selector` (hoisted). iteration-start child auto-created by apply - do NOT list it. `children` is a list of child node ids; child nodes are defined at the same level in `spec.nodes`. Inner nodes reference `[<iter_id>, "item"]`.
 
 **loop** exposes `loop_variables[].label` (hoisted). `break_conditions` reference the loop's own variables, NOT child outputs.
 

@@ -46,11 +46,10 @@ def test_validate_undeclared_variable():
 def test_validate_loop_missing_loop_variable():
     spec = _spec([
         {"id": "loop", "type": "loop", "title": "L",
-         "children": [
-            {"id": "body", "type": "code", "title": "B",
-             "variables": [{"variable": "c", "value_selector": ["loop", "counter"]}],
-             "outputs": {"o": {"type": "string"}}},
-        ]},
+         "children": ["body"]},
+        {"id": "body", "type": "code", "title": "B",
+         "variables": [{"variable": "c", "value_selector": ["loop", "counter"]}],
+         "outputs": {"o": {"type": "string"}}},
     ])
     errors = validate_spec(spec)
     assert any("'loop' (loop) does not expose variable 'counter'" in e for e in errors)
@@ -59,10 +58,9 @@ def test_validate_loop_missing_loop_variable():
 def test_validate_cannot_reference_inside_container_from_outside():
     spec = _spec([
         {"id": "loop", "type": "loop", "title": "L",
-         "children": [
-            {"id": "body", "type": "code", "title": "B",
-             "variables": [], "outputs": {"o": {"type": "number"}}},
-        ]},
+         "children": ["body"]},
+        {"id": "body", "type": "code", "title": "B",
+         "variables": [], "outputs": {"o": {"type": "number"}}},
         {"id": "end", "type": "end", "title": "E",
          "outputs": [{"variable": "x", "value_selector": ["body", "o"]}]},
     ])
@@ -76,11 +74,10 @@ def test_validate_iteration_output_selector_can_reference_child():
          "variables": [{"variable": "items", "label": "I", "type": "text-input"}]},
         {"id": "iter", "type": "iteration", "title": "I",
          "iterator_selector": ["start", "items"], "output_selector": ["inner", "out"],
-         "children": [
-            {"id": "inner", "type": "code", "title": "In",
-             "variables": [{"variable": "item", "value_selector": ["iter", "item"]}],
-             "outputs": {"out": {"type": "number"}}},
-        ]},
+         "children": ["inner"]},
+        {"id": "inner", "type": "code", "title": "In",
+         "variables": [{"variable": "item", "value_selector": ["iter", "item"]}],
+         "outputs": {"out": {"type": "number"}}},
     ])
     assert validate_spec(spec) == []
 
@@ -91,11 +88,10 @@ def test_validate_iteration_item_from_outside_invalid():
          "variables": [{"variable": "items", "label": "I", "type": "text-input"}]},
         {"id": "iter", "type": "iteration", "title": "I",
          "iterator_selector": ["start", "items"], "output_selector": ["inner", "out"],
-         "children": [
-            {"id": "inner", "type": "code", "title": "In",
-             "variables": [{"variable": "item", "value_selector": ["iter", "item"]}],
-             "outputs": {"out": {"type": "number"}}},
-        ]},
+         "children": ["inner"]},
+        {"id": "inner", "type": "code", "title": "In",
+         "variables": [{"variable": "item", "value_selector": ["iter", "item"]}],
+         "outputs": {"out": {"type": "number"}}},
         {"id": "end", "type": "end", "title": "E",
          "outputs": [{"variable": "x", "value_selector": ["iter", "item"]}]},
     ])
@@ -107,10 +103,9 @@ def test_validate_loop_break_condition_cannot_reference_child():
     spec = _spec([
         {"id": "loop", "type": "loop", "title": "L",
          "break_conditions": [{"variable_selector": ["body", "done"], "comparison_operator": "is", "value": "true"}],
-         "children": [
-            {"id": "body", "type": "code", "title": "B",
-             "variables": [], "outputs": {"done": {"type": "boolean"}}},
-        ]},
+         "children": ["body"]},
+        {"id": "body", "type": "code", "title": "B",
+         "variables": [], "outputs": {"done": {"type": "boolean"}}},
     ])
     errors = validate_spec(spec)
     assert any("cannot reference 'body'" in e for e in errors)
@@ -121,11 +116,10 @@ def test_validate_loop_with_loop_variables_ok():
         {"id": "loop", "type": "loop", "title": "L",
          "loop_variables": [{"label": "counter", "var_type": "number", "value": "0", "value_type": "constant"}],
          "break_conditions": [{"variable_selector": ["loop", "counter"], "comparison_operator": "≥", "value": "5"}],
-         "children": [
-            {"id": "body", "type": "code", "title": "B",
-             "variables": [{"variable": "c", "value_selector": ["loop", "counter"]}],
-             "outputs": {"o": {"type": "number"}}},
-        ]},
+         "children": ["body"]},
+        {"id": "body", "type": "code", "title": "B",
+         "variables": [{"variable": "c", "value_selector": ["loop", "counter"]}],
+         "outputs": {"o": {"type": "number"}}},
     ])
     assert validate_spec(spec) == []
 
@@ -156,3 +150,17 @@ def test_validate_invalid_env_var_value_type():
     }
     errors = validate_spec(spec)
     assert any("value_type 'text'" in e and "Use 'string'" in e for e in errors)
+
+
+def test_validate_child_not_in_nodes():
+    """Iteration references a child id that doesn't exist in spec.nodes."""
+    spec = _spec([
+        {"id": "start", "type": "start", "title": "S",
+         "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+        {"id": "iter", "type": "iteration", "title": "I",
+         "iterator_selector": ["start", "q"], "output_selector": ["missing", "out"],
+         "children": ["missing"]},
+        {"id": "end", "type": "end", "title": "E", "outputs": []},
+    ])
+    errors = validate_spec(spec)
+    assert any("child 'missing' not found" in e for e in errors)
