@@ -12,15 +12,12 @@ def _spec(nodes, edges=None):
 def test_validate_clean_workflow():
     spec = _spec([
         {"id": "start", "type": "start", "title": "S",
-         "variables": [{"variable": "q", "label": "Q", "type": "text-input"}],
-         "fields": {}},
+         "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
         {"id": "code", "type": "code", "title": "C",
          "variables": [{"variable": "q", "value_selector": ["start", "q"]}],
-         "outputs": {"r": {"type": "string"}},
-         "fields": {"code_language": "python3", "code": "def main(q): return {'r': q}"}},
+         "outputs": {"r": {"type": "string"}}},
         {"id": "end", "type": "end", "title": "E",
-         "outputs": [{"variable": "out", "value_selector": ["code", "r"]}],
-         "fields": {}},
+         "outputs": [{"variable": "out", "value_selector": ["code", "r"]}]},
     ])
     assert validate_spec(spec) == []
 
@@ -28,8 +25,7 @@ def test_validate_clean_workflow():
 def test_validate_missing_target_node():
     spec = _spec([
         {"id": "end", "type": "end", "title": "E",
-         "outputs": [{"variable": "x", "value_selector": ["nonexistent", "y"]}],
-         "fields": {}},
+         "outputs": [{"variable": "x", "value_selector": ["nonexistent", "y"]}]},
     ])
     errors = validate_spec(spec)
     assert any("does not exist" in e for e in errors)
@@ -38,23 +34,22 @@ def test_validate_missing_target_node():
 def test_validate_undeclared_variable():
     spec = _spec([
         {"id": "start", "type": "start", "title": "S",
-         "variables": [{"variable": "q", "label": "Q", "type": "text-input"}], "fields": {}},
+         "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
         {"id": "code", "type": "code", "title": "C",
          "variables": [{"variable": "q", "value_selector": ["start", "wrong"]}],
-         "outputs": {"r": {"type": "string"}}, "fields": {}},
+         "outputs": {"r": {"type": "string"}}},
     ])
     errors = validate_spec(spec)
     assert any("does not expose variable 'wrong'" in e for e in errors)
 
 
 def test_validate_loop_missing_loop_variable():
-    """loopbody references loop.counter but loop has no loop_variables."""
     spec = _spec([
-        {"id": "loop", "type": "loop", "title": "L", "fields": {},
+        {"id": "loop", "type": "loop", "title": "L",
          "children": [
             {"id": "body", "type": "code", "title": "B",
              "variables": [{"variable": "c", "value_selector": ["loop", "counter"]}],
-             "outputs": {"o": {"type": "string"}}, "fields": {}},
+             "outputs": {"o": {"type": "string"}}},
         ]},
     ])
     errors = validate_spec(spec)
@@ -62,64 +57,59 @@ def test_validate_loop_missing_loop_variable():
 
 
 def test_validate_cannot_reference_inside_container_from_outside():
-    """end references body (inside loop) from outside."""
     spec = _spec([
-        {"id": "loop", "type": "loop", "title": "L", "fields": {},
+        {"id": "loop", "type": "loop", "title": "L",
          "children": [
             {"id": "body", "type": "code", "title": "B",
-             "variables": [], "outputs": {"o": {"type": "number"}}, "fields": {}},
+             "variables": [], "outputs": {"o": {"type": "number"}}},
         ]},
         {"id": "end", "type": "end", "title": "E",
-         "outputs": [{"variable": "x", "value_selector": ["body", "o"]}], "fields": {}},
+         "outputs": [{"variable": "x", "value_selector": ["body", "o"]}]},
     ])
     errors = validate_spec(spec)
     assert any("cannot reference 'body'" in e and "inside container" in e for e in errors)
 
 
 def test_validate_iteration_output_selector_can_reference_child():
-    """iteration.output_selector legitimately points at an inner node."""
     spec = _spec([
         {"id": "start", "type": "start", "title": "S",
-         "variables": [{"variable": "items", "label": "I", "type": "text-input"}], "fields": {}},
+         "variables": [{"variable": "items", "label": "I", "type": "text-input"}]},
         {"id": "iter", "type": "iteration", "title": "I",
          "iterator_selector": ["start", "items"], "output_selector": ["inner", "out"],
-         "fields": {}, "children": [
+         "children": [
             {"id": "inner", "type": "code", "title": "In",
              "variables": [{"variable": "item", "value_selector": ["iter", "item"]}],
-             "outputs": {"out": {"type": "number"}}, "fields": {}},
+             "outputs": {"out": {"type": "number"}}},
         ]},
     ])
-    errors = validate_spec(spec)
-    assert errors == []
+    assert validate_spec(spec) == []
 
 
 def test_validate_iteration_item_from_outside_invalid():
-    """Outside node can't reference iter.item (only iter.output)."""
     spec = _spec([
         {"id": "start", "type": "start", "title": "S",
-         "variables": [{"variable": "items", "label": "I", "type": "text-input"}], "fields": {}},
+         "variables": [{"variable": "items", "label": "I", "type": "text-input"}]},
         {"id": "iter", "type": "iteration", "title": "I",
          "iterator_selector": ["start", "items"], "output_selector": ["inner", "out"],
-         "fields": {}, "children": [
+         "children": [
             {"id": "inner", "type": "code", "title": "In",
              "variables": [{"variable": "item", "value_selector": ["iter", "item"]}],
-             "outputs": {"out": {"type": "number"}}, "fields": {}},
+             "outputs": {"out": {"type": "number"}}},
         ]},
         {"id": "end", "type": "end", "title": "E",
-         "outputs": [{"variable": "x", "value_selector": ["iter", "item"]}], "fields": {}},
+         "outputs": [{"variable": "x", "value_selector": ["iter", "item"]}]},
     ])
     errors = validate_spec(spec)
     assert any("does not expose variable 'item'" in e for e in errors)
 
 
 def test_validate_loop_break_condition_cannot_reference_child():
-    """break_conditions should reference loop's own variables, not child outputs."""
     spec = _spec([
         {"id": "loop", "type": "loop", "title": "L",
          "break_conditions": [{"variable_selector": ["body", "done"], "comparison_operator": "is", "value": "true"}],
-         "fields": {}, "children": [
+         "children": [
             {"id": "body", "type": "code", "title": "B",
-             "variables": [], "outputs": {"done": {"type": "boolean"}}, "fields": {}},
+             "variables": [], "outputs": {"done": {"type": "boolean"}}},
         ]},
     ])
     errors = validate_spec(spec)
@@ -127,15 +117,42 @@ def test_validate_loop_break_condition_cannot_reference_child():
 
 
 def test_validate_loop_with_loop_variables_ok():
-    """loop with loop_variables declared; child references one - valid."""
     spec = _spec([
         {"id": "loop", "type": "loop", "title": "L",
          "loop_variables": [{"label": "counter", "var_type": "number", "value": "0", "value_type": "constant"}],
          "break_conditions": [{"variable_selector": ["loop", "counter"], "comparison_operator": "≥", "value": "5"}],
-         "fields": {}, "children": [
+         "children": [
             {"id": "body", "type": "code", "title": "B",
              "variables": [{"variable": "c", "value_selector": ["loop", "counter"]}],
-             "outputs": {"o": {"type": "number"}}, "fields": {}},
+             "outputs": {"o": {"type": "number"}}},
         ]},
     ])
     assert validate_spec(spec) == []
+
+
+def test_validate_invalid_node_id():
+    spec = _spec([
+        {"id": "Bad/Id", "type": "start", "title": "S"},
+    ])
+    errors = validate_spec(spec)
+    assert any("must match [a-z0-9_-]" in e for e in errors)
+
+
+def test_validate_duplicate_node_id():
+    spec = _spec([
+        {"id": "dup", "type": "start", "title": "S"},
+        {"id": "dup", "type": "end", "title": "E", "outputs": []},
+    ])
+    errors = validate_spec(spec)
+    assert any("duplicate node id" in e for e in errors)
+
+
+def test_validate_invalid_env_var_value_type():
+    spec = {
+        "mode": "workflow", "name": "T", "dsl_version": "0.5.0",
+        "environment_variables": [{"name": "KEY", "value": "v", "value_type": "text"}],
+        "nodes": [{"id": "start", "type": "start", "title": "S"}],
+        "edges": [],
+    }
+    errors = validate_spec(spec)
+    assert any("value_type 'text'" in e and "Use 'string'" in e for e in errors)

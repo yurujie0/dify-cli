@@ -1,12 +1,28 @@
 # Workflow Spec Authoring Guide
 
-This document describes how to author `spec.json` for the two-phase workflow: **design stage** writes the spec (structure + IO contracts + dependencies), **implementation stage** fills each node's internal config (`@file`).
+This document describes how to author `spec.json` for the two-phase workflow: **design stage** writes the spec (structure + IO contracts + dependencies), **implementation stage** fills each node's internal config (impl files).
 
 ## Two-phase model
 
-- **Design stage**: author `spec.json` with node structure, IO declarations, dependencies (variable selectors), and `@file` references for internal config (files don't exist yet). Run `dify-cli spec validate` to check structure.
-- **Implementation stage**: for each node, a sub-agent generates the `@file` (internal config: code, prompt_template, model params). Run `dify-cli node check <id> --spec spec.json --fields <file>` to verify each node.
-- **Apply**: `dify-cli apply` merges hoisted spec fields + `@file` content, full-validates, generates DSL.
+- **Design stage**: author `spec.json` with node structure, IO declarations, dependencies (variable selectors), and `implementation_hint` for nodes that need internal config. Impl files don't exist yet. Run `dify-cli spec validate` to check structure.
+- **Implementation stage**: for each node that needs internal config, a sub-agent generates the impl file. Run `dify-cli node check <id> --spec spec.json` to verify each node (impl path is derived by convention, no need to specify).
+- **Apply**: `dify-cli apply` merges hoisted spec fields + impl file content, full-validates, generates DSL.
+
+## Impl file convention
+
+Impl files (node internal config) live at a convention-based path derived from the spec file:
+
+```
+<spec_dir>/<spec_basename>_impl/<node_id>.json
+```
+
+Examples:
+- `spec.json` -> `impl/code.json`, `impl/llm.json`, ...
+- `mitr_spec.json` -> `mitr_impl/code.json`, `mitr_impl/llm.json`, ...
+
+**Node ids must match `[a-z0-9_-]+`** (lowercase alphanumerics, underscore, hyphen) - they're used directly as impl filenames. `spec validate` rejects invalid ids.
+
+**Which nodes need impl files?** Most node types (code, llm, http-request, answer, tool, ...). These don't: `start`, `end`, `iteration`, `loop`, `document-extractor`, `if-else` - their required fields are all hoisted or have frontend defaults, so the spec layer is complete at design stage.
 
 ## Spec format
 
@@ -25,34 +41,29 @@ This document describes how to author `spec.json` for the two-phase workflow: **
   "nodes": [
     {
       "id": "start", "type": "start", "title": "Start",
-      "variables": [{"variable": "q", "label": "Query", "type": "text-input", "required": true}],
-      "implementation_hint": "用户输入查询字符串",
-      "fields": "@/tmp/impl/start.json"
+      "variables": [{"variable": "q", "label": "Query", "type": "text-input", "required": true}]
     },
     {
       "id": "code", "type": "code", "title": "Parse",
       "variables": [{"variable": "q", "value_selector": ["start", "q"]}],
       "outputs": {"items": {"type": "array[string]"}},
       "_output_schema": {"items": {"element": "string"}},
-      "implementation_hint": "把查询拆成关键词数组",
-      "fields": "@/tmp/impl/code.json"
+      "implementation_hint": "把查询拆成关键词数组"
     },
     {
       "id": "iter", "type": "iteration", "title": "Loop",
       "iterator_selector": ["code", "items"],
       "output_selector": ["inner", "upper"],
-      "fields": "@/tmp/impl/iter.json",
       "children": [
         {"id": "inner", "type": "code", "title": "Upper",
          "variables": [{"variable": "item", "value_selector": ["iter", "item"]}],
          "outputs": {"upper": {"type": "string"}},
-         "fields": "@/tmp/impl/inner.json"}
+         "implementation_hint": "对每个 item 做大写转换"}
       ]
     },
     {
       "id": "end", "type": "end", "title": "End",
-      "outputs": [{"variable": "r", "value_selector": ["iter", "output"]}],
-      "fields": "@/tmp/impl/end.json"
+      "outputs": [{"variable": "r", "value_selector": ["iter", "output"]}]
     }
   ],
   "edges": [
@@ -63,54 +74,49 @@ This document describes how to author `spec.json` for the two-phase workflow: **
 }
 ```
 
+Note: `start`/`end`/`iter` don't have `implementation_hint` (they don't need impl files). `code`/`inner` have `implementation_hint` to guide the implementation sub-agent.
+
 ### Top-level fields
 
 - `mode` (required): `workflow` | `advanced-chat`
 - `name` (required): app name
 - `dsl_version` (optional, default latest bundled)
 - `description` (optional)
-- `environment_variables` (optional): list of `{name, value, value_type}`
+- `environment_variables` (optional): list of `{name, value, value_type}` - `value_type` must be a SegmentType (`string`/`secret`/`number`/...), NOT `text`
 - `conversation_variables` (optional): list of `{name, value_type, description, value}`
 - `nodes` (required): list of node objects
 - `edges` (required): list of edge objects
 
-### Node object - field layering
+### Node object
 
-Each node has two layers:
-
-**Spec layer** (design stage, visible to `spec validate`):
-- `id` (required): stable string id (NOT a timestamp). Re-apply keeps ids stable.
+- `id` (required): stable string id matching `[a-z0-9_-]+`. Used as impl filename. Re-apply keeps ids stable.
 - `type` (required): node type string (`dify-cli node types` to list)
 - `title` (required)
-- **Hoisted IO/dependency fields** (per node type, see table below) - contain variable selectors or IO declarations
+- **Hoisted IO/dependency fields** (per node type, see table below) - contain variable selectors or IO declarations, visible to `spec validate`
 - `_output_schema` (optional): IO contract schema with field structure (apply ignores; for future test generation)
-- `implementation_hint` (optional): natural-language description of what the node should do (apply ignores; passed to the implementation sub-agent)
-- `fields`: `@file` reference (string) or inline dict - the node's internal config
-
-**@file layer** (implementation stage, the `fields` content):
-- Internal config only (code, prompt_template, model params, url, headers, etc.)
-- Must NOT contain hoisted fields (they live at spec layer)
-- No cross-node variable selectors (those are hoisted); template refs `{{#node.var#}}` are OK (checked by `node check`)
+- `implementation_hint` (optional): natural-language description of what the node should do. Only for nodes that need impl files (code/llm/http/etc). apply ignores it; the implementation sub-agent reads it.
+- `children` (iteration/loop only): nodes inside the container
 
 ### Hoisted fields per node type
 
-Fields containing variable selectors or IO declarations are hoisted to spec layer (not in `@file`):
+Fields containing variable selectors or IO declarations are hoisted to the spec node top-level (NOT in impl files):
 
-| Node type | Hoisted fields | Why |
+| Node type | Hoisted fields | Needs impl file? |
 |---|---|---|
-| start | `variables` | input declaration (what the node exposes) |
-| code | `variables`, `outputs` | input deps + output declaration |
-| end | `outputs` | workflow outputs (contain value_selector) |
-| llm | `context` | contains variable_selector |
-| if-else | `cases` | conditions contain variable_selector |
-| iteration | `iterator_selector`, `output_selector` | deps |
-| loop | `loop_variables`, `break_conditions` | state declaration + condition deps |
-| template-transform | `variables` | contains value_selector |
-| variable-aggregator | `variables` | selector array |
-| knowledge-retrieval | `query_variable_selector` | dep |
-| question-classifier | `query_variable_selector` | dep |
-| parameter-extractor | `parameters`, `query` | output declaration + dep |
-| http-request, answer, tool, agent, ... | (none) | all internal config, goes in @file |
+| start | `variables` | no |
+| end | `outputs` | no |
+| if-else | `cases` | no |
+| iteration | `iterator_selector`, `output_selector` | no |
+| loop | `loop_variables`, `break_conditions` | no |
+| document-extractor | `variable_selector` | no |
+| code | `variables`, `outputs` | yes |
+| llm | `context` | yes |
+| template-transform | `variables` | yes |
+| variable-aggregator | `variables` | yes |
+| knowledge-retrieval | `query_variable_selector` | yes |
+| question-classifier | `query_variable_selector` | yes |
+| parameter-extractor | `parameters`, `query` | yes |
+| http-request, answer, tool, agent, ... | (none) | yes |
 
 ### Edge object
 
@@ -119,8 +125,8 @@ Fields containing variable selectors or IO declarations are hoisted to spec laye
 
 ### Key properties
 
-- **Idempotent**: same spec + same @files -> byte-identical DSL (deterministic ids, edge ids `<source>-<target>`, condition ids `<node>-cond-<index>`).
-- **Design stage can validate without @file**: `spec validate` only checks hoisted fields (structure), not @file content.
+- **Idempotent**: same spec + same impl files -> byte-identical DSL (deterministic ids, edge ids `<source>-<target>`, condition ids `<node>-cond-<index>`).
+- **Design stage validates without impl files**: `spec validate` only checks hoisted fields (structure), not impl content.
 
 ## Variable model (what each node exposes)
 
@@ -146,9 +152,9 @@ Fields containing variable selectors or IO declarations are hoisted to spec laye
 
 **Exception**: `iteration.output_selector` legitimately points at an inner node.
 
-## @file content (internal config)
+## Impl file content (internal config)
 
-The `@file` (fields) holds internal node config. Examples of what goes in @file (NOT hoisted):
+The impl file holds internal node config - everything NOT hoisted. Examples:
 
 - **code**: `{code_language, code}` (the actual Python/JS code)
 - **llm**: `{model, prompt_template, vision, ...}` (model params + prompts)
@@ -156,19 +162,19 @@ The `@file` (fields) holds internal node config. Examples of what goes in @file 
 - **answer**: `{answer}` (template string, may contain `{{#node.var#}}`)
 - **template-transform**: `{template}` (the template string; `variables` is hoisted)
 
-Use the `write_file` tool to create these files in the implementation stage. Template variable refs (`{{#node.var#}}`) inside @file are checked by `node check` against the spec.
+Use the `write_file` tool to create impl files in the implementation stage. Template variable refs (`{{#node.var#}}`) inside impl files are checked by `node check` against the spec. If an impl file accidentally includes a hoisted field, it's silently dropped (spec wins).
 
 ## Node field gotchas
 
-When unsure about a field's shape, run `dify-cli schema node <type>`.
+When unsure about a field's shape, run `dify-cli schema node <type>` (hoisted fields are excluded from the output - you see only what goes in the impl file).
 
 **start `variables[]`** items require `variable`, `label`, `type`. `type`: `text-input`/`paragraph`/`number`/`select`/`file`/`file-list`/`json_object`. For `select`, add `options`. (hoisted)
 
 **if-else `cases[].conditions[]`** uses `variable_selector` (NOT `variable`). `value` accepts string/array[string]/boolean/null - **not number**. (hoisted)
 
-**http-request `headers`/`params`** are **strings** (one `key: value` per line), not objects. (@file)
+**http-request `headers`/`params`** are **strings** (one `key: value` per line), not objects. (impl)
 
-**http-request `body`** is `{type, data}` where type is `none`/`form-data`/`x-www-form-urlencoded`/`raw-text`/`json`/`binary`. (@file)
+**http-request `body`** is `{type, data}` where type is `none`/`form-data`/`x-www-form-urlencoded`/`raw-text`/`json`/`binary`. (impl)
 
 **end `outputs[]`** items: `{variable, value_selector}`. (hoisted)
 
@@ -178,7 +184,7 @@ When unsure about a field's shape, run `dify-cli schema node <type>`.
 
 **code `outputs`** is `{name: {type: SegmentType}}`. SegmentType: `string`/`number`/`object`/`array[string]`/`array[object]`/`array[number]`/`boolean`/`file`/`array[file]`/`secret`/`none`. (hoisted)
 
-**code `code_language`** accepts only `python3` or `javascript` (NOT `python`; auto-corrected). (@file)
+**code `code_language`** accepts only `python3` or `javascript` (NOT `python`; auto-corrected). (impl)
 
 **iteration** requires `iterator_selector` + `output_selector` (hoisted). iteration-start child auto-created by apply - do NOT list it. Inner nodes in `children` reference `[<iter_id>, "item"]`.
 
@@ -186,23 +192,22 @@ When unsure about a field's shape, run `dify-cli schema node <type>`.
 
 **Comparison operators**: `contains`/`is`/`empty`/`not empty`/`=`/`≠`/`>`/`<`/`≥`/`≤`. Run `dify-cli schema enum if-else comparison_operator` for full list.
 
-**LLM `prompt_template`** is a JSON array of `{role, text}`. (@file) For long prompts, `@file` the whole fields file.
+**LLM `prompt_template`** is a JSON array of `{role, text}`. (impl)
 
 ## Examples
 
 ### Minimal LLM workflow
 
-Design spec:
+Design spec (impl files don't exist yet):
 ```json
 {
   "mode": "workflow", "name": "My App",
   "nodes": [
-    {"id": "start", "type": "start", "title": "Start", "fields": "@/tmp/impl/start.json"},
+    {"id": "start", "type": "start", "title": "Start"},
     {"id": "llm", "type": "llm", "title": "Call GPT",
-     "fields": "@/tmp/impl/llm.json"},
+     "implementation_hint": "调用GPT生成回答"},
     {"id": "end", "type": "end", "title": "End",
-     "outputs": [{"variable": "result", "value_selector": ["llm", "text"]}],
-     "fields": "@/tmp/impl/end.json"}
+     "outputs": [{"variable": "result", "value_selector": ["llm", "text"]}]}
   ],
   "edges": [
     {"source": "start", "target": "llm"},
@@ -214,9 +219,9 @@ Design spec:
 ```bash
 dify-cli spec validate --spec spec.json   # design stage: structure OK
 
-# implementation stage: sub-agents generate @files
-# /tmp/impl/llm.json: {"model": {"provider":"openai","name":"gpt-4o"}, "prompt_template":[...]}
-dify-cli node check llm --spec spec.json --fields /tmp/impl/llm.json
+# implementation stage: sub-agent generates impl/llm.json
+# (impl path derived from spec name: spec.json -> impl/llm.json)
+dify-cli node check llm --spec spec.json  # verifies impl/llm.json
 
 dify-cli apply --spec spec.json -f app.yaml --force
 dify-cli validate app.yaml
@@ -224,4 +229,4 @@ dify-cli validate app.yaml
 
 ### Changing the workflow
 
-Edit `spec.json` (structure/IO) and/or the `@file` (internal config), re-run `spec validate` + `apply`. Never hand-edit the generated DSL.
+Edit `spec.json` (structure/IO) and/or impl files (internal config), re-run `spec validate` + `apply`. Never hand-edit the generated DSL.

@@ -66,7 +66,7 @@ def validate_spec(spec: dict[str, Any]) -> list[str]:
             errors.extend(_check_reference(node, path, selector, nodes_by_id))
 
     errors.extend(_check_variables(spec))
-    errors.extend(_check_fields_refs(spec))
+    errors.extend(_check_node_ids(spec))
     return errors
 
 
@@ -99,45 +99,31 @@ def _check_variables(spec: dict[str, Any]) -> list[str]:
     return errors
 
 
-def _check_fields_refs(spec: dict[str, Any]) -> list[str]:
-    """Check that nodes requiring internal config have an @file reference in
-    `fields`. Nodes whose required fields are all hoisted (start/end/iter/loop/
-    document-extractor) may have `fields: {}`."""
-    from .spec_format import NODES_WITHOUT_INTERNAL_CONFIG
+def _check_node_ids(spec: dict[str, Any]) -> list[str]:
+    """Check node ids are path-safe ([a-z0-9_-]+) - they're used directly as
+    impl filenames. Also catches duplicate ids."""
+    from .spec_format import is_valid_node_id
     errors: list[str] = []
+    seen: set[str] = set()
+
+    def _check(nid: str, ntype: str) -> None:
+        if not is_valid_node_id(nid):
+            errors.append(
+                f"node id {nid!r} ({ntype}): must match [a-z0-9_-]+ "
+                f"(used as impl filename). Use lowercase, no spaces/slashes."
+            )
+        elif nid in seen:
+            errors.append(f"duplicate node id {nid!r}")
+        else:
+            seen.add(nid)
+
     for n in spec.get("nodes", []) or []:
         if not isinstance(n, dict):
             continue
-        ntype = n.get("type", "")
-        if ntype in NODES_WITHOUT_INTERNAL_CONFIG:
-            continue
-        fields = n.get("fields")
-        nid = n.get("id", "?")
-        if fields is None or (isinstance(fields, dict) and not fields):
-            errors.append(
-                f"node {nid!r} ({ntype}): 'fields' must be an @file reference "
-                f"(e.g. \"fields\": \"@/tmp/impl/{nid}.json\") for its internal config "
-                f"(code/model/prompt_template/etc). Got empty."
-            )
-        elif isinstance(fields, str) and not fields.startswith("@"):
-            errors.append(
-                f"node {nid!r} ({ntype}): 'fields' string must start with @ "
-                f"(file reference). Got {fields!r}."
-            )
-        # Recurse into children
+        _check(n.get("id", ""), n.get("type", ""))
         for child in n.get("children", []) or []:
-            if not isinstance(child, dict):
-                continue
-            ctype = child.get("type", "")
-            if ctype in NODES_WITHOUT_INTERNAL_CONFIG:
-                continue
-            cfields = child.get("fields")
-            cid = child.get("id", "?")
-            if cfields is None or (isinstance(cfields, dict) and not cfields):
-                errors.append(
-                    f"node {cid!r} ({ctype}): 'fields' must be an @file reference "
-                    f"for its internal config. Got empty."
-                )
+            if isinstance(child, dict):
+                _check(child.get("id", ""), child.get("type", ""))
     return errors
 
 

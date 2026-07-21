@@ -140,20 +140,24 @@ def remove(
 def check(
     node_id: str = typer.Argument(..., help="The node id as declared in the spec"),
     spec: Path = typer.Option(..., "--spec", "-s", help="Design-stage spec.json (provides IO context + dependency declarations)"),
-    fields: Path = typer.Option(..., "--fields", help="JSON file with the node's internal config (the @file content)"),
+    fields: Optional[Path] = typer.Option(None, "--fields", help="Override impl file path (default: <spec_dir>/<spec_basename>_impl/<node_id>.json)"),
     dsl_version: Optional[str] = typer.Option(None, "--dsl-version", "-v", help="DSL version (default: from spec or latest)"),
 ) -> None:
     """Check a single node's internal config against the design spec.
 
-    Used in the implementation stage: a sub-agent fills a node's @file
+    Used in the implementation stage: a sub-agent fills a node's impl file
     (internal config like code/prompt_template), then runs this to verify
     the merged node data (hoisted IO from spec + internal config) passes
     backend schema validation, and that template variable references
     ({{#node.var#}}) in the internal config point to valid in-scope nodes.
+
+    The impl file path is derived from the spec path by convention:
+    spec.json -> impl/<node_id>.json; mitr_spec.json -> mitr_impl/<node_id>.json.
+    Override with --fields if needed.
     """
     import json as _json
     from ..core.node_builder import _post_process, fields_dict_to_list, parse_field_value
-    from ..core.spec_format import HOISTED_FIELDS
+    from ..core.spec_format import HOISTED_FIELDS, NODES_WITHOUT_INTERNAL_CONFIG, impl_file_for, needs_implementation
     from ..core.spec_validator import _walk_all_strings, _extract_template_refs, _exposed_vars, _in_scope
 
     spec_data = _json.loads(spec.read_text(encoding="utf-8"))
@@ -171,13 +175,22 @@ def check(
         raise DifyCliError(f"Node {node_id!r} not found in spec {spec}")
     ntype = target_spec.get("type", "")
 
-    # Internal config from --fields file.
-    internal = _json.loads(fields.read_text(encoding="utf-8"))
-    if not isinstance(internal, dict):
-        raise DifyCliError(f"--fields must contain a JSON object, got {type(internal).__name__}")
+    # Internal config: from --fields override, or convention-based impl path.
+    if not needs_implementation(ntype):
+        internal = {}
+    else:
+        impl_path = fields if fields is not None else impl_file_for(spec, node_id)
+        if not impl_path.exists():
+            raise DifyCliError(
+                f"node {node_id!r} ({ntype}): implementation file not found: {impl_path}\n"
+                f"(create it with the node's internal config - code/model/prompt_template/etc)"
+            )
+        internal = _json.loads(impl_path.read_text(encoding="utf-8"))
+        if not isinstance(internal, dict):
+            raise DifyCliError(f"impl file must contain a JSON object, got {type(internal).__name__}")
 
-    # Merge hoisted (from spec) + internal. Hoisted wins over @file
-    # (spec is the source of truth). If @file accidentally includes a
+    # Merge hoisted (from spec) + internal. Hoisted wins over impl
+    # (spec is the source of truth). If impl accidentally includes a
     # hoisted field, just drop it - no error.
     hoisted = {f: target_spec[f] for f in HOISTED_FIELDS.get(ntype, []) if f in target_spec}
     for f in list(internal):

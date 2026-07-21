@@ -85,7 +85,7 @@ def apply(
             "chat/completion apps have no graph to build"
         )
 
-    _build_nodes(doc, spec_data.get("nodes", []), dsl_version)
+    _build_nodes(doc, spec_data.get("nodes", []), dsl_version, spec)
     _build_edges(doc, spec_data.get("edges", []))
     _connect_container_starts(doc)
     _build_variables(doc, spec_data)
@@ -99,54 +99,41 @@ def apply(
     )
 
 
-def _resolve_node_fields(n: dict, node_type: str) -> dict:
-    """Merge a node's internal config (@file or inline dict) with its hoisted
-    IO/dependency fields (which live at the spec node top-level).
+def _resolve_node_fields(n: dict, node_type: str, spec_path) -> dict:
+    """Merge a node's internal config (from convention-based impl file) with
+    its hoisted IO/dependency fields (which live at the spec node top-level).
 
-    Hoisted fields (variables, outputs, cases, etc.) contain cross-node
-    selectors and are validated at design stage; internal config (code,
-    prompt_template, model) lives in @file and is filled at implementation
-    stage. apply merges them to form the full node data.
+    Impl file path: <spec_dir>/<spec_basename>_impl/<node_id>.json
+    (e.g. spec.json -> impl/code1.json; mitr_spec.json -> mitr_impl/code1.json)
+
+    Nodes in NODES_WITHOUT_INTERNAL_CONFIG have no impl file - their required
+    fields are all hoisted or have frontend defaults.
     """
-    from ..core.node_builder import parse_field_value
-    from ..core.spec_format import HOISTED_FIELDS, IGNORED_SPEC_FIELDS
+    from ..core.spec_format import HOISTED_FIELDS, NODES_WITHOUT_INTERNAL_CONFIG, impl_file_for
 
-    # Internal config: fields is @file (string -> JSON object) or inline dict.
-    raw_fields = n.get("fields")
-    if isinstance(raw_fields, str):
-        if not raw_fields.startswith("@"):
-            raise DifyCliError(f"node {n.get('id')!r} fields string must be @file reference, got {raw_fields!r}")
-        target = raw_fields[1:]
-        from pathlib import Path as _Path
-        p = _Path(target)
-        if not p.exists():
-            raise DifyCliError(f"node {n.get('id')!r} fields @file not found: {target}")
-        import json as _json
-        try:
-            internal = _json.loads(p.read_text(encoding="utf-8"))
-        except _json.JSONDecodeError as e:
-            raise DifyCliError(f"node {n.get('id')!r} fields @file {target} is not valid JSON: {e}") from e
-        if not isinstance(internal, dict):
-            raise DifyCliError(
-                f"node {n.get('id')!r} fields @file must contain a JSON object, got {type(internal).__name__}"
-            )
-    elif isinstance(raw_fields, dict):
-        internal = raw_fields
-    elif raw_fields is None:
-        internal = {}
-    else:
-        raise DifyCliError(f"node {n.get('id')!r} fields must be @file string or object, got {type(raw_fields).__name__}")
-
-    # Hoisted fields from spec node top-level. Hoisted wins over @file
-    # (spec is the source of truth for structure/IO).
+    nid = n.get("id", "?")
     hoisted = {f: n[f] for f in HOISTED_FIELDS.get(node_type, []) if f in n}
 
-    # If @file accidentally includes a hoisted field, just drop it -
-    # the spec value takes precedence. No error (agents don't always
-    # track which fields are hoisted vs internal).
-    for f in list(internal):
-        if f in hoisted:
-            del internal[f]
+    if node_type in NODES_WITHOUT_INTERNAL_CONFIG:
+        internal = {}
+    else:
+        impl_path = impl_file_for(spec_path, nid)
+        if not impl_path.exists():
+            raise DifyCliError(
+                f"node {nid!r} ({node_type}): implementation file not found: {impl_path}\n"
+                f"(create it with the node's internal config - code/model/prompt_template/etc)"
+            )
+        import json as _json
+        try:
+            internal = _json.loads(impl_path.read_text(encoding="utf-8"))
+        except _json.JSONDecodeError as e:
+            raise DifyCliError(f"node {nid!r} impl file {impl_path} is not valid JSON: {e}") from e
+        if not isinstance(internal, dict):
+            raise DifyCliError(f"node {nid!r} impl file must contain a JSON object, got {type(internal).__name__}")
+        # Drop any hoisted field the impl file accidentally includes - spec wins.
+        for f in list(internal):
+            if f in hoisted:
+                del internal[f]
 
     return _resolve_atfile_strings({**internal, **hoisted})
 
@@ -170,7 +157,7 @@ def _resolve_atfile_strings(obj):
     return obj
 
 
-def _build_nodes(doc, nodes: list, dsl_version: str) -> None:
+def _build_nodes(doc, nodes: list, dsl_version: str, spec_path) -> None:
     top_index = 0
     for n in nodes:
         if not isinstance(n, dict) or "id" not in n or "type" not in n:
@@ -179,7 +166,7 @@ def _build_nodes(doc, nodes: list, dsl_version: str) -> None:
             node_type=n["type"],
             dsl_version=dsl_version,
             title=n.get("title"),
-            fields_dict=_resolve_node_fields(n, n["type"]),
+            fields_dict=_resolve_node_fields(n, n["type"], spec_path),
         )
         node["id"] = n["id"]
         # Linear layout for top-level nodes (Dify frontend can auto-arrange).
@@ -198,7 +185,7 @@ def _build_nodes(doc, nodes: list, dsl_version: str) -> None:
                     node_type=child["type"],
                     dsl_version=dsl_version,
                     title=child.get("title"),
-                    fields_dict=_resolve_node_fields(child, child["type"]),
+                    fields_dict=_resolve_node_fields(child, child["type"], spec_path),
                 )
                 cnode["id"] = child["id"]
                 attach_to_parent(cnode, node["id"], n["type"])
