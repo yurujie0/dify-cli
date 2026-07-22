@@ -72,6 +72,7 @@ def validate_spec(spec: dict[str, Any]) -> list[str]:
     errors.extend(_check_node_ids(spec))
     errors.extend(_check_edges(spec, nodes_by_id))
     errors.extend(_check_hoisted_structure(spec))
+    errors.extend(_check_mode_node_compat(spec))
     return errors
 
 
@@ -215,6 +216,36 @@ def _check_hoisted_structure(spec: dict[str, Any]) -> list[str]:
                             f"variable_selector must be a flat array like ['node_id','var'], "
                             f"got nested array {vs!r}"
                         )
+    return errors
+
+
+# Node types only valid in specific modes.
+_MODE_NODE_RULES = {
+    "workflow": {"forbidden": {"answer"}, "reason": "answer node is only for advanced-chat mode (use end node for workflow output)"},
+    "advanced-chat": {"forbidden": set(), "reason": ""},
+}
+
+
+def _check_mode_node_compat(spec: dict[str, Any]) -> list[str]:
+    """Check that node types are compatible with the spec's mode.
+    e.g. answer node is only valid in advanced-chat, not workflow."""
+    mode = spec.get("mode", "")
+    rules = _MODE_NODE_RULES.get(mode)
+    if not rules:
+        return []
+    forbidden = rules["forbidden"]
+    if not forbidden:
+        return []
+    reason = rules["reason"]
+    errors: list[str] = []
+    for n in spec.get("nodes", []) or []:
+        if not isinstance(n, dict):
+            continue
+        ntype = n.get("type", "")
+        if ntype in forbidden:
+            errors.append(
+                f"node {n.get('id', '?')!r} ({ntype}): {reason}"
+            )
     return errors
 
 

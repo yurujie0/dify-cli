@@ -266,3 +266,29 @@ def test_validate_ifelse_nested_variable_selector():
     ])
     errors = validate_spec(spec)
     assert any("variable_selector must be a flat array" in e for e in errors)
+
+
+def test_validate_answer_in_workflow_mode_rejected():
+    """answer node is only for advanced-chat, not workflow."""
+    spec = _spec([
+        {"id": "start", "type": "start", "title": "S"},
+        {"id": "answer", "type": "answer", "title": "A",
+         "implementation_hint": "reply"},
+        {"id": "end", "type": "end", "title": "E", "outputs": []},
+    ])
+    errors = validate_spec(spec)
+    assert any("answer" in e and "advanced-chat" in e for e in errors)
+
+
+def test_validate_answer_in_advanced_chat_ok():
+    """answer node is valid in advanced-chat mode."""
+    spec = {
+        "mode": "advanced-chat", "name": "T", "dsl_version": "0.5.0",
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "answer", "type": "answer", "title": "A",
+             "implementation_hint": "reply"},
+        ],
+        "edges": [{"source": "start", "target": "answer"}],
+    }
+    assert validate_spec(spec) == []
