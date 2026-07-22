@@ -219,16 +219,26 @@ def _check_hoisted_structure(spec: dict[str, Any]) -> list[str]:
     return errors
 
 
-# Node types only valid in specific modes.
+# Node types only valid in specific modes (from frontend use-available-nodes-meta-data.ts).
+# workflow: has end + trigger nodes, no answer
+# advanced-chat: has answer, no end + trigger nodes
 _MODE_NODE_RULES = {
-    "workflow": {"forbidden": {"answer"}, "reason": "answer node is only for advanced-chat mode (use end node for workflow output)"},
-    "advanced-chat": {"forbidden": set(), "reason": ""},
+    "workflow": {
+        "forbidden": {"answer"},
+        "reason": "answer node is only for advanced-chat mode (use end node for workflow output)",
+    },
+    "advanced-chat": {
+        "forbidden": {"end", "trigger-webhook", "trigger-schedule", "trigger-plugin"},
+        "reason": "end/trigger nodes are only for workflow mode (use answer node for chat output)",
+    },
 }
 
 
 def _check_mode_node_compat(spec: dict[str, Any]) -> list[str]:
     """Check that node types are compatible with the spec's mode.
-    e.g. answer node is only valid in advanced-chat, not workflow."""
+    From frontend use-available-nodes-meta-data.ts:
+    - workflow mode: has end + trigger nodes, no answer
+    - advanced-chat mode: has answer, no end + trigger nodes"""
     mode = spec.get("mode", "")
     rules = _MODE_NODE_RULES.get(mode)
     if not rules:

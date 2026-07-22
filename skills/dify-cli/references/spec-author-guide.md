@@ -81,7 +81,7 @@ Note: `start`/`end`/`iter` don't have `implementation_hint` (they don't need imp
 
 ### Top-level fields
 
-- `mode` (required): `workflow` | `advanced-chat`. `workflow` uses `end` node for output; `advanced-chat` uses `answer` node for conversational replies. `answer` node is **forbidden in workflow mode** - `spec validate` will reject it.
+- `mode` (required): `workflow` | `advanced-chat`. `workflow` uses `end` + `trigger-*` nodes (no `answer`); `advanced-chat` uses `answer` node (no `end` / `trigger-*`). `spec validate` enforces this compatibility.
 - `name` (required): app name
 - `dsl_version` (optional, default latest bundled)
 - `description` (optional)

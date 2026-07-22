@@ -292,3 +292,34 @@ def test_validate_answer_in_advanced_chat_ok():
         "edges": [{"source": "start", "target": "answer"}],
     }
     assert validate_spec(spec) == []
+
+
+def test_validate_end_in_advanced_chat_rejected():
+    """end node is only for workflow, not advanced-chat."""
+    spec = {
+        "mode": "advanced-chat", "name": "T", "dsl_version": "0.5.0",
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "end", "type": "end", "title": "E", "outputs": []},
+        ],
+        "edges": [{"source": "start", "target": "end"}],
+    }
+    errors = validate_spec(spec)
+    assert any("end" in e and "workflow" in e for e in errors)
+
+
+def test_validate_trigger_in_advanced_chat_rejected():
+    """trigger nodes are only for workflow, not advanced-chat."""
+    spec = {
+        "mode": "advanced-chat", "name": "T", "dsl_version": "0.5.0",
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "trigger", "type": "trigger-webhook", "title": "T",
+             "implementation_hint": "webhook"},
+            {"id": "answer", "type": "answer", "title": "A",
+             "implementation_hint": "reply"},
+        ],
+        "edges": [{"source": "trigger", "target": "answer"}],
+    }
+    errors = validate_spec(spec)
+    assert any("trigger-webhook" in e and "workflow" in e for e in errors)
