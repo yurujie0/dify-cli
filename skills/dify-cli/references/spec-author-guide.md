@@ -125,6 +125,27 @@ Fields containing variable selectors or IO declarations are hoisted to the spec 
 - `source` / `target` (required): spec node ids
 - `src_handle` (optional): for if-else branches, `"true"` / `"false"`. Default `"source"`.
 
+### Edge wiring rules for iteration/loop containers
+
+`spec validate` enforces these rules:
+
+1. **Container must NOT directly connect to its own child.** The iteration-start/loop-start node (auto-created by apply) handles subgraph entry - it auto-connects to child nodes with no incoming edges. Do NOT write `container -> child` edges.
+   ```
+   WRONG:  {"source": "iter", "target": "inner"}      # container -> own child
+   RIGHT:  (omit - start node auto-connects to entry children)
+   ```
+
+2. **Child inside a container must NOT connect to an external node.** The container node's `output` is what external nodes reference. Use `container -> external` instead.
+   ```
+   WRONG:  {"source": "inner", "target": "end"}        # child -> external
+   RIGHT:  {"source": "iter", "target": "end"}          # container -> external
+   ```
+
+3. **Edges between siblings (same container) are fine.**
+   ```
+   OK:     {"source": "inner_a", "target": "inner_b"}  # sibling -> sibling
+   ```
+
 ### Key properties
 
 - **Idempotent**: same spec + same impl files -> byte-identical DSL (deterministic ids, edge ids `<source>-<target>`, condition ids `<node>-cond-<index>`).

@@ -70,6 +70,7 @@ def validate_spec(spec: dict[str, Any]) -> list[str]:
 
     errors.extend(_check_variables(spec))
     errors.extend(_check_node_ids(spec))
+    errors.extend(_check_edges(spec, nodes_by_id))
     return errors
 
 
@@ -135,6 +136,51 @@ def _check_node_ids(spec: dict[str, Any]) -> list[str]:
                 errors.append(
                     f"node {n.get('id', '?')!r}: child {child_id!r} not found in spec.nodes"
                 )
+    return errors
+
+
+def _check_edges(spec: dict[str, Any], nodes_by_id: dict[str, dict]) -> list[str]:
+    """Check edge wiring rules for iteration/loop containers:
+    1. A container node must NOT directly connect to its own child (the
+       auto-created start node handles subgraph entry).
+    2. A child inside a container must NOT connect directly to an external
+       node (the container node's output is what external nodes reference)."""
+    # Build: container_id -> set of child ids
+    container_children: dict[str, set[str]] = {}
+    # Build: node_id -> container_id (parent)
+    node_to_container: dict[str, str] = {}
+    for n in spec.get("nodes", []) or []:
+        if not isinstance(n, dict):
+            continue
+        if n.get("type") in ("iteration", "loop"):
+            cid = n["id"]
+            container_children[cid] = set(n.get("children", []) or [])
+            for child_id in n.get("children", []) or []:
+                node_to_container[child_id] = cid
+
+    errors: list[str] = []
+    for e in spec.get("edges", []) or []:
+        if not isinstance(e, dict):
+            continue
+        src = e.get("source", "")
+        dst = e.get("target", "")
+
+        # Rule 1: container -> its own child is wrong (start node handles entry)
+        if src in container_children and dst in container_children.get(src, set()):
+            errors.append(
+                f"edge {src!r} -> {dst!r}: container must not directly connect to its own child. "
+                f"The start node auto-connects to entry children; remove this edge."
+            )
+
+        # Rule 2: child -> external node is wrong (use container as source)
+        src_container = node_to_container.get(src)
+        dst_container = node_to_container.get(dst)
+        if src_container and src_container != dst_container:
+            errors.append(
+                f"edge {src!r} -> {dst!r}: node {src!r} is inside container {src_container!r}, "
+                f"cannot connect to external node {dst!r}. Use {src_container!r} -> {dst!r} instead."
+            )
+
     return errors
 
 

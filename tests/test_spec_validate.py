@@ -164,3 +164,76 @@ def test_validate_child_not_in_nodes():
     ])
     errors = validate_spec(spec)
     assert any("child 'missing' not found" in e for e in errors)
+
+
+def test_validate_container_to_child_edge_rejected():
+    """Container must not directly connect to its own child."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "iter", "type": "iteration", "title": "I",
+             "iterator_selector": ["start", "q"], "output_selector": ["inner", "out"],
+             "children": ["inner"]},
+            {"id": "inner", "type": "code", "title": "In",
+             "variables": [{"variable": "item", "value_selector": ["iter", "item"]}],
+             "outputs": {"out": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E", "outputs": []},
+        ],
+        [
+            {"source": "start", "target": "iter"},
+            {"source": "iter", "target": "inner"},   # WRONG
+            {"source": "iter", "target": "end"},
+        ],
+    )
+    errors = validate_spec(spec)
+    assert any("container must not directly connect" in e for e in errors)
+
+
+def test_validate_child_to_external_edge_rejected():
+    """Child inside container must not connect to external node."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "iter", "type": "iteration", "title": "I",
+             "iterator_selector": ["start", "q"], "output_selector": ["inner", "out"],
+             "children": ["inner"]},
+            {"id": "inner", "type": "code", "title": "In",
+             "variables": [{"variable": "item", "value_selector": ["iter", "item"]}],
+             "outputs": {"out": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E", "outputs": []},
+        ],
+        [
+            {"source": "start", "target": "iter"},
+            {"source": "inner", "target": "end"},   # WRONG
+        ],
+    )
+    errors = validate_spec(spec)
+    assert any("cannot connect to external" in e and "Use 'iter'" in e for e in errors)
+
+
+def test_validate_correct_container_edges_ok():
+    """Correct wiring: start->iter, iter->end, inner->inner2 (siblings)."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "iter", "type": "iteration", "title": "I",
+             "iterator_selector": ["start", "q"], "output_selector": ["inner2", "out"],
+             "children": ["inner", "inner2"]},
+            {"id": "inner", "type": "code", "title": "A",
+             "variables": [{"variable": "item", "value_selector": ["iter", "item"]}],
+             "outputs": {"mid": {"type": "string"}}},
+            {"id": "inner2", "type": "code", "title": "B",
+             "variables": [{"variable": "mid", "value_selector": ["inner", "mid"]}],
+             "outputs": {"out": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E", "outputs": []},
+        ],
+        [
+            {"source": "start", "target": "iter"},
+            {"source": "inner", "target": "inner2"},   # sibling edge OK
+            {"source": "iter", "target": "end"},        # container -> external OK
+        ],
+    )
+    assert validate_spec(spec) == []

@@ -68,6 +68,17 @@ def apply_fields(target: dict[str, Any], fields: list[str]) -> None:
 _DEFAULT_NODE_WIDTH = 244
 _DEFAULT_NODE_HEIGHT = 90
 
+
+def _apply_array_defaults(data: dict[str, Any], schema: dict[str, Any]) -> None:
+    """Fill empty arrays for optional array fields the frontend expects present.
+    Restored from the old node add path - lost during the fields_dict refactor."""
+    props = schema.get("properties", {})
+    for name, sub in props.items():
+        if name in data:
+            continue
+        if sub.get("type") == "array":
+            data[name] = []
+
 # Iteration/loop start nodes use a dedicated ReactFlow renderer
 # (custom-iteration-start / custom-loop-start), not the generic "custom".
 # The frontend looks up the renderer by the top-level `type` field and
@@ -110,7 +121,20 @@ def _post_process(node_type: str, data: dict[str, Any]) -> None:
     distilled from use-config.ts handleAddXxx handlers across nodes.
     """
     _normalize_fields(node_type, data)
+    _patch_end_output_value_types(data)
     _walk_and_patch(data)
+
+
+def _patch_end_output_value_types(data: dict[str, Any]) -> None:
+    """Fill `value_type` on end node output items if missing. The frontend
+    expects each output to have value_type (e.g. "string"); without it the
+    node crashes on import."""
+    outputs = data.get("outputs")
+    if not isinstance(outputs, list):
+        return
+    for item in outputs:
+        if isinstance(item, dict) and "value_type" not in item:
+            item["value_type"] = "string"
 
 
 def _normalize_fields(node_type: str, data: dict[str, Any]) -> None:
@@ -157,9 +181,12 @@ def _walk_and_patch(obj: Any) -> None:
 
 
 def _deep_merge(base: dict[str, Any], overlay: dict[str, Any]) -> dict[str, Any]:
-    """Recursively merge overlay into base; overlay wins on conflicts."""
+    """Recursively merge overlay into base; overlay wins on conflicts.
+    None values in overlay are skipped (don't clobber the base default)."""
     result: dict[str, Any] = copy.deepcopy(base)
     for k, v in overlay.items():
+        if v is None:
+            continue  # keep the base/default value
         if isinstance(v, dict) and isinstance(result.get(k), dict):
             result[k] = _deep_merge(result[k], v)
         else:
@@ -197,6 +224,7 @@ def build_node(
         apply_fields(user_overlay, fields)
         data = _deep_merge(data, user_overlay)
 
+    _apply_array_defaults(data, schema)
     _post_process(node_type, data)
     validate_node_data(node_type, data, schema)
     pos = position or {"x": 0.0, "y": 0.0}
