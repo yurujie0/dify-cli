@@ -93,7 +93,7 @@ The validator is the single source of truth for variable semantics - see the "Va
 ### `dify-cli node check` - check a single node's internal config (implementation stage)
 
 ```bash
-dify-cli node check <node_id> --spec spec.json  # impl path derived: <spec_dir>/<spec_basename>_impl/<id>.json
+dify-cli node check <node_id> --spec spec.json  # impl path derived from spec name (spec.json -> impl/<id>.json)
 ```
 
 Used in the implementation stage: a sub-agent fills a node's `@file` (internal config), then runs this to verify the merged node data (hoisted IO from spec + internal config) passes backend schema validation, and that template variable references (`{{#node.var#}}`) in the config point to valid in-scope nodes. See [spec-author-guide.md](references/spec-author-guide.md).

@@ -10,15 +10,16 @@ This document describes how to author `spec.json` for the two-phase workflow: **
 
 ## Impl file convention
 
-Impl files (node internal config) live at a convention-based path derived from the spec file:
+Impl files (node internal config) live at a convention-based path derived from the spec file name:
+
+- Take the spec filename, remove `_spec` suffix if present (or remove `spec` if the filename IS `spec`), then append `_impl`.
+- Put the directory next to the spec file.
 
 ```
-<spec_dir>/<spec_basename>_impl/<node_id>.json
+spec.json       -> impl/        (NOT spec_impl/)
+mitr_spec.json  -> mitr_impl/
+myapp.json      -> myapp_impl/
 ```
-
-Examples:
-- `spec.json` -> `impl/code.json`, `impl/llm.json`, ...
-- `mitr_spec.json` -> `mitr_impl/code.json`, `mitr_impl/llm.json`, ...
 
 **Node ids must match `[a-z0-9_-]+`** (lowercase alphanumerics, underscore, hyphen) - they're used directly as impl filenames. `spec validate` rejects invalid ids.
 
