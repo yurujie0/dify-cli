@@ -71,6 +71,7 @@ def validate_spec(spec: dict[str, Any]) -> list[str]:
     errors.extend(_check_variables(spec))
     errors.extend(_check_node_ids(spec))
     errors.extend(_check_edges(spec, nodes_by_id))
+    errors.extend(_check_hoisted_structure(spec))
     return errors
 
 
@@ -136,6 +137,84 @@ def _check_node_ids(spec: dict[str, Any]) -> list[str]:
                 errors.append(
                     f"node {n.get('id', '?')!r}: child {child_id!r} not found in spec.nodes"
                 )
+    return errors
+
+
+# Required keys for hoisted structures (field name mistakes agents make).
+_HOISTED_STRUCTURE_CHECKS = {
+    "if-else": {
+        "field": "cases",
+        "item_required": ["case_id", "logical_operator", "conditions"],
+        "common_mistakes": {"id": "case_id", "operator": "comparison_operator"},
+        "subfield": "conditions",
+        "sub_required": ["variable_selector", "comparison_operator"],
+        "sub_mistakes": {"operator": "comparison_operator", "variable": "variable_selector"},
+    },
+    "loop": {
+        "field": "break_conditions",
+        "item_required": ["variable_selector", "comparison_operator"],
+        "common_mistakes": {"operator": "comparison_operator", "variable": "variable_selector"},
+    },
+}
+
+
+def _check_hoisted_structure(spec: dict[str, Any]) -> list[str]:
+    """Check that hoisted fields have the correct field names.
+    Catches common agent mistakes: id vs case_id, operator vs comparison_operator,
+    variable vs variable_selector, nested array in variable_selector."""
+    errors: list[str] = []
+    for n in spec.get("nodes", []) or []:
+        if not isinstance(n, dict):
+            continue
+        ntype = n.get("type", "")
+        nid = n.get("id", "?")
+        check = _HOISTED_STRUCTURE_CHECKS.get(ntype)
+        if not check:
+            continue
+        items = n.get(check["field"]) or []
+        for i, item in enumerate(items):
+            if not isinstance(item, dict):
+                continue
+            # Check common mistakes
+            for bad, good in check.get("common_mistakes", {}).items():
+                if bad in item and good not in item:
+                    errors.append(
+                        f"node {nid!r} ({ntype}).{check['field']}[{i}]: "
+                        f"use {good!r} not {bad!r}"
+                    )
+            # Check required keys
+            for req in check.get("item_required", []):
+                if req not in item:
+                    errors.append(
+                        f"node {nid!r} ({ntype}).{check['field']}[{i}]: "
+                        f"missing required field {req!r}"
+                    )
+            # Check sub-items (e.g. conditions inside cases)
+            subfield = check.get("subfield")
+            if subfield:
+                for j, sub in enumerate(item.get(subfield, []) or []):
+                    if not isinstance(sub, dict):
+                        continue
+                    for bad, good in check.get("sub_mistakes", {}).items():
+                        if bad in sub and good not in sub:
+                            errors.append(
+                                f"node {nid!r} ({ntype}).{check['field']}[{i}].{subfield}[{j}]: "
+                                f"use {good!r} not {bad!r}"
+                            )
+                    for req in check.get("sub_required", []):
+                        if req not in sub:
+                            errors.append(
+                                f"node {nid!r} ({ntype}).{check['field']}[{i}].{subfield}[{j}]: "
+                                f"missing required field {req!r}"
+                            )
+                    # Check variable_selector is a flat array of strings, not nested
+                    vs = sub.get("variable_selector")
+                    if vs and isinstance(vs, list) and len(vs) > 0 and isinstance(vs[0], list):
+                        errors.append(
+                            f"node {nid!r} ({ntype}).{check['field']}[{i}].{subfield}[{j}]: "
+                            f"variable_selector must be a flat array like ['node_id','var'], "
+                            f"got nested array {vs!r}"
+                        )
     return errors
 
 

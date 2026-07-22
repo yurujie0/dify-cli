@@ -237,3 +237,32 @@ def test_validate_correct_container_edges_ok():
         ],
     )
     assert validate_spec(spec) == []
+
+
+def test_validate_ifelse_case_wrong_field_names():
+    """Case uses 'id' instead of 'case_id', Condition uses 'operator' instead of 'comparison_operator'."""
+    spec = _spec([
+        {"id": "start", "type": "start", "title": "S",
+         "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+        {"id": "ifelse", "type": "if-else", "title": "B",
+         "cases": [{"id": "true", "logical_operator": "and",
+                     "conditions": [{"variable_selector": ["start", "q"], "operator": "contains", "value": "x"}]}]},
+        {"id": "end", "type": "end", "title": "E", "outputs": []},
+    ])
+    errors = validate_spec(spec)
+    assert any("use 'case_id' not 'id'" in e for e in errors)
+    assert any("use 'comparison_operator' not 'operator'" in e for e in errors)
+
+
+def test_validate_ifelse_nested_variable_selector():
+    """variable_selector must be flat array, not nested."""
+    spec = _spec([
+        {"id": "start", "type": "start", "title": "S",
+         "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+        {"id": "ifelse", "type": "if-else", "title": "B",
+         "cases": [{"case_id": "true", "logical_operator": "and",
+                     "conditions": [{"variable_selector": [["start", "q"]], "comparison_operator": "contains", "value": "x"}]}]},
+        {"id": "end", "type": "end", "title": "E", "outputs": []},
+    ])
+    errors = validate_spec(spec)
+    assert any("variable_selector must be a flat array" in e for e in errors)
