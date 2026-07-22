@@ -333,6 +333,10 @@ def _check_reference(
     nid = node.get("id", "?")
     full = f"{nid}.fields.{path}" if path else f"{nid}.fields"
 
+    # env/sys are built-in variable scopes, not nodes.
+    if target_id in ("env", "sys"):
+        return []
+
     target = nodes_by_id.get(target_id)
     if target is None:
         return [f"{full}: references node {target_id!r} which does not exist"]
