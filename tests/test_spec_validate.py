@@ -10,15 +10,90 @@ def _spec(nodes, edges=None):
 
 
 def test_validate_clean_workflow():
-    spec = _spec([
-        {"id": "start", "type": "start", "title": "S",
-         "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
-        {"id": "code", "type": "code", "title": "C",
-         "variables": [{"variable": "q", "value_selector": ["start", "q"]}],
-         "outputs": {"r": {"type": "string"}}},
-        {"id": "end", "type": "end", "title": "E",
-         "outputs": [{"variable": "out", "value_selector": ["code", "r"]}]},
-    ])
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "q", "value_selector": ["start", "q"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "out", "value_selector": ["code", "r"]}]},
+        ],
+        [
+            {"source": "start", "target": "code"},
+            {"source": "code", "target": "end"},
+        ],
+    )
+    assert validate_spec(spec) == []
+
+
+def test_validate_missing_edge_between_siblings():
+    """Node references another node's output but no edge connects them."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "code1", "type": "code", "title": "C1",
+             "variables": [{"variable": "q", "value_selector": ["start", "q"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "code2", "type": "code", "title": "C2",
+             "variables": [{"variable": "r", "value_selector": ["code1", "r"]}],  # depends on code1
+             "outputs": {"out": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E", "outputs": []},
+        ],
+        [
+            {"source": "start", "target": "code1"},
+            # MISSING: {"source": "code1", "target": "code2"}
+            {"source": "code2", "target": "end"},
+        ],
+    )
+    errors = validate_spec(spec)
+    assert any("no edge connects 'code1'" in e and "'code2'" in e for e in errors)
+
+
+def test_validate_edge_coverage_ok():
+    """All variable references have matching edges (direct or transitive)."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "code1", "type": "code", "title": "C1",
+             "variables": [{"variable": "q", "value_selector": ["start", "q"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "code2", "type": "code", "title": "C2",
+             "variables": [{"variable": "r", "value_selector": ["code1", "r"]}],
+             "outputs": {"out": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "result", "value_selector": ["code2", "out"]}]},
+        ],
+        [
+            {"source": "start", "target": "code1"},
+            {"source": "code1", "target": "code2"},
+            {"source": "code2", "target": "end"},
+        ],
+    )
+    assert validate_spec(spec) == []
+
+
+def test_validate_edge_coverage_transitive_ok():
+    """Transitive path is enough: A->B->C, C references A's output."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "mid", "type": "code", "title": "M",
+             "variables": [{"variable": "q", "value_selector": ["start", "q"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "q", "value_selector": ["start", "q"]}]},  # references start
+        ],
+        [
+            {"source": "start", "target": "mid"},
+            {"source": "mid", "target": "end"},
+            # end references start, path: start -> mid -> end (transitive)
+        ],
+    )
     assert validate_spec(spec) == []
 
 
@@ -82,6 +157,75 @@ def test_validate_iteration_output_selector_can_reference_child():
     assert validate_spec(spec) == []
 
 
+def test_validate_missing_edge_between_siblings():
+    """Node references another node's output but no edge connects them."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "code1", "type": "code", "title": "C1",
+             "variables": [{"variable": "q", "value_selector": ["start", "q"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "code2", "type": "code", "title": "C2",
+             "variables": [{"variable": "r", "value_selector": ["code1", "r"]}],  # depends on code1
+             "outputs": {"out": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E", "outputs": []},
+        ],
+        [
+            {"source": "start", "target": "code1"},
+            # MISSING: {"source": "code1", "target": "code2"}
+            {"source": "code2", "target": "end"},
+        ],
+    )
+    errors = validate_spec(spec)
+    assert any("no edge connects 'code1'" in e and "'code2'" in e for e in errors)
+
+
+def test_validate_edge_coverage_ok():
+    """All variable references have matching edges (direct or transitive)."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "code1", "type": "code", "title": "C1",
+             "variables": [{"variable": "q", "value_selector": ["start", "q"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "code2", "type": "code", "title": "C2",
+             "variables": [{"variable": "r", "value_selector": ["code1", "r"]}],
+             "outputs": {"out": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "result", "value_selector": ["code2", "out"]}]},
+        ],
+        [
+            {"source": "start", "target": "code1"},
+            {"source": "code1", "target": "code2"},
+            {"source": "code2", "target": "end"},
+        ],
+    )
+    assert validate_spec(spec) == []
+
+
+def test_validate_edge_coverage_transitive_ok():
+    """Transitive path is enough: A->B->C, C references A's output."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "mid", "type": "code", "title": "M",
+             "variables": [{"variable": "q", "value_selector": ["start", "q"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "q", "value_selector": ["start", "q"]}]},  # references start
+        ],
+        [
+            {"source": "start", "target": "mid"},
+            {"source": "mid", "target": "end"},
+            # end references start, path: start -> mid -> end (transitive)
+        ],
+    )
+    assert validate_spec(spec) == []
+
+
 def test_validate_iteration_item_from_outside_invalid():
     spec = _spec([
         {"id": "start", "type": "start", "title": "S",
@@ -121,6 +265,75 @@ def test_validate_loop_with_loop_variables_ok():
          "variables": [{"variable": "c", "value_selector": ["loop", "counter"]}],
          "outputs": {"o": {"type": "number"}}},
     ])
+    assert validate_spec(spec) == []
+
+
+def test_validate_missing_edge_between_siblings():
+    """Node references another node's output but no edge connects them."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "code1", "type": "code", "title": "C1",
+             "variables": [{"variable": "q", "value_selector": ["start", "q"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "code2", "type": "code", "title": "C2",
+             "variables": [{"variable": "r", "value_selector": ["code1", "r"]}],  # depends on code1
+             "outputs": {"out": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E", "outputs": []},
+        ],
+        [
+            {"source": "start", "target": "code1"},
+            # MISSING: {"source": "code1", "target": "code2"}
+            {"source": "code2", "target": "end"},
+        ],
+    )
+    errors = validate_spec(spec)
+    assert any("no edge connects 'code1'" in e and "'code2'" in e for e in errors)
+
+
+def test_validate_edge_coverage_ok():
+    """All variable references have matching edges (direct or transitive)."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "code1", "type": "code", "title": "C1",
+             "variables": [{"variable": "q", "value_selector": ["start", "q"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "code2", "type": "code", "title": "C2",
+             "variables": [{"variable": "r", "value_selector": ["code1", "r"]}],
+             "outputs": {"out": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "result", "value_selector": ["code2", "out"]}]},
+        ],
+        [
+            {"source": "start", "target": "code1"},
+            {"source": "code1", "target": "code2"},
+            {"source": "code2", "target": "end"},
+        ],
+    )
+    assert validate_spec(spec) == []
+
+
+def test_validate_edge_coverage_transitive_ok():
+    """Transitive path is enough: A->B->C, C references A's output."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "mid", "type": "code", "title": "M",
+             "variables": [{"variable": "q", "value_selector": ["start", "q"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "q", "value_selector": ["start", "q"]}]},  # references start
+        ],
+        [
+            {"source": "start", "target": "mid"},
+            {"source": "mid", "target": "end"},
+            # end references start, path: start -> mid -> end (transitive)
+        ],
+    )
     assert validate_spec(spec) == []
 
 
@@ -239,6 +452,75 @@ def test_validate_correct_container_edges_ok():
     assert validate_spec(spec) == []
 
 
+def test_validate_missing_edge_between_siblings():
+    """Node references another node's output but no edge connects them."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "code1", "type": "code", "title": "C1",
+             "variables": [{"variable": "q", "value_selector": ["start", "q"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "code2", "type": "code", "title": "C2",
+             "variables": [{"variable": "r", "value_selector": ["code1", "r"]}],  # depends on code1
+             "outputs": {"out": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E", "outputs": []},
+        ],
+        [
+            {"source": "start", "target": "code1"},
+            # MISSING: {"source": "code1", "target": "code2"}
+            {"source": "code2", "target": "end"},
+        ],
+    )
+    errors = validate_spec(spec)
+    assert any("no edge connects 'code1'" in e and "'code2'" in e for e in errors)
+
+
+def test_validate_edge_coverage_ok():
+    """All variable references have matching edges (direct or transitive)."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "code1", "type": "code", "title": "C1",
+             "variables": [{"variable": "q", "value_selector": ["start", "q"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "code2", "type": "code", "title": "C2",
+             "variables": [{"variable": "r", "value_selector": ["code1", "r"]}],
+             "outputs": {"out": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "result", "value_selector": ["code2", "out"]}]},
+        ],
+        [
+            {"source": "start", "target": "code1"},
+            {"source": "code1", "target": "code2"},
+            {"source": "code2", "target": "end"},
+        ],
+    )
+    assert validate_spec(spec) == []
+
+
+def test_validate_edge_coverage_transitive_ok():
+    """Transitive path is enough: A->B->C, C references A's output."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "mid", "type": "code", "title": "M",
+             "variables": [{"variable": "q", "value_selector": ["start", "q"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "q", "value_selector": ["start", "q"]}]},  # references start
+        ],
+        [
+            {"source": "start", "target": "mid"},
+            {"source": "mid", "target": "end"},
+            # end references start, path: start -> mid -> end (transitive)
+        ],
+    )
+    assert validate_spec(spec) == []
+
+
 def test_validate_ifelse_case_wrong_field_names():
     """Case uses 'id' instead of 'case_id', Condition uses 'operator' instead of 'comparison_operator'."""
     spec = _spec([
@@ -291,6 +573,75 @@ def test_validate_answer_in_advanced_chat_ok():
         ],
         "edges": [{"source": "start", "target": "answer"}],
     }
+    assert validate_spec(spec) == []
+
+
+def test_validate_missing_edge_between_siblings():
+    """Node references another node's output but no edge connects them."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "code1", "type": "code", "title": "C1",
+             "variables": [{"variable": "q", "value_selector": ["start", "q"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "code2", "type": "code", "title": "C2",
+             "variables": [{"variable": "r", "value_selector": ["code1", "r"]}],  # depends on code1
+             "outputs": {"out": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E", "outputs": []},
+        ],
+        [
+            {"source": "start", "target": "code1"},
+            # MISSING: {"source": "code1", "target": "code2"}
+            {"source": "code2", "target": "end"},
+        ],
+    )
+    errors = validate_spec(spec)
+    assert any("no edge connects 'code1'" in e and "'code2'" in e for e in errors)
+
+
+def test_validate_edge_coverage_ok():
+    """All variable references have matching edges (direct or transitive)."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "code1", "type": "code", "title": "C1",
+             "variables": [{"variable": "q", "value_selector": ["start", "q"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "code2", "type": "code", "title": "C2",
+             "variables": [{"variable": "r", "value_selector": ["code1", "r"]}],
+             "outputs": {"out": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "result", "value_selector": ["code2", "out"]}]},
+        ],
+        [
+            {"source": "start", "target": "code1"},
+            {"source": "code1", "target": "code2"},
+            {"source": "code2", "target": "end"},
+        ],
+    )
+    assert validate_spec(spec) == []
+
+
+def test_validate_edge_coverage_transitive_ok():
+    """Transitive path is enough: A->B->C, C references A's output."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "mid", "type": "code", "title": "M",
+             "variables": [{"variable": "q", "value_selector": ["start", "q"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "q", "value_selector": ["start", "q"]}]},  # references start
+        ],
+        [
+            {"source": "start", "target": "mid"},
+            {"source": "mid", "target": "end"},
+            # end references start, path: start -> mid -> end (transitive)
+        ],
+    )
     assert validate_spec(spec) == []
 
 
@@ -374,6 +725,75 @@ def test_validate_ifelse_edge_correct_src_handle_ok():
         ],
         [
             {"source": "ifelse", "target": "end", "src_handle": "has_value"},  # OK
+        ],
+    )
+    assert validate_spec(spec) == []
+
+
+def test_validate_missing_edge_between_siblings():
+    """Node references another node's output but no edge connects them."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "code1", "type": "code", "title": "C1",
+             "variables": [{"variable": "q", "value_selector": ["start", "q"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "code2", "type": "code", "title": "C2",
+             "variables": [{"variable": "r", "value_selector": ["code1", "r"]}],  # depends on code1
+             "outputs": {"out": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E", "outputs": []},
+        ],
+        [
+            {"source": "start", "target": "code1"},
+            # MISSING: {"source": "code1", "target": "code2"}
+            {"source": "code2", "target": "end"},
+        ],
+    )
+    errors = validate_spec(spec)
+    assert any("no edge connects 'code1'" in e and "'code2'" in e for e in errors)
+
+
+def test_validate_edge_coverage_ok():
+    """All variable references have matching edges (direct or transitive)."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "code1", "type": "code", "title": "C1",
+             "variables": [{"variable": "q", "value_selector": ["start", "q"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "code2", "type": "code", "title": "C2",
+             "variables": [{"variable": "r", "value_selector": ["code1", "r"]}],
+             "outputs": {"out": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "result", "value_selector": ["code2", "out"]}]},
+        ],
+        [
+            {"source": "start", "target": "code1"},
+            {"source": "code1", "target": "code2"},
+            {"source": "code2", "target": "end"},
+        ],
+    )
+    assert validate_spec(spec) == []
+
+
+def test_validate_edge_coverage_transitive_ok():
+    """Transitive path is enough: A->B->C, C references A's output."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "mid", "type": "code", "title": "M",
+             "variables": [{"variable": "q", "value_selector": ["start", "q"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "q", "value_selector": ["start", "q"]}]},  # references start
+        ],
+        [
+            {"source": "start", "target": "mid"},
+            {"source": "mid", "target": "end"},
+            # end references start, path: start -> mid -> end (transitive)
         ],
     )
     assert validate_spec(spec) == []

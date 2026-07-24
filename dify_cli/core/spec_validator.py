@@ -73,6 +73,7 @@ def validate_spec(spec: dict[str, Any]) -> list[str]:
     errors.extend(_check_edges(spec, nodes_by_id))
     errors.extend(_check_hoisted_structure(spec))
     errors.extend(_check_mode_node_compat(spec))
+    errors.extend(_check_edge_coverage(spec, nodes_by_id))
     return errors
 
 
@@ -264,6 +265,81 @@ def _check_mode_node_compat(spec: dict[str, Any]) -> list[str]:
                 f"node {n.get('id', '?')!r} ({ntype}): {reason}"
             )
     return errors
+
+
+def _check_edge_coverage(spec: dict[str, Any], nodes_by_id: dict[str, dict]) -> list[str]:
+    """Check that if a node references another node's output via value_selector,
+    there is an edge connecting them (directly or transitively).
+
+    Without this, a node can reference a variable from a node it has no edge
+    connection to - the Dify frontend checklist reports "dependency variable
+    not found" on import."""
+    edges = spec.get("edges", []) or []
+    # Build adjacency: source -> set of targets
+    adjacency: dict[str, set[str]] = {}
+    for e in edges:
+        if isinstance(e, dict):
+            adjacency.setdefault(e.get("source", ""), set()).add(e.get("target", ""))
+
+    # Collect each node's variable references that require an edge.
+    # Only value_selector (code/end/template-transform inputs) requires an edge;
+    # variable_selector (if-else conditions), iterator_selector, output_selector
+    # read from the variable pool and don't need a direct edge.
+    _EDGE_REQUIRED_PATTERNS = {
+        "code": ["variables.*.value_selector"],
+        "end": ["outputs.*.value_selector"],
+        "template-transform": ["variables.*.value_selector"],
+    }
+    node_deps: dict[str, set[str]] = {}  # node_id -> set of referenced node ids
+    for node in nodes_by_id.values():
+        nid = node.get("id", "")
+        ntype = node.get("type", "")
+        deps: set[str] = set()
+        for pattern in _EDGE_REQUIRED_PATTERNS.get(ntype, []):
+            for _path, selector in _walk_pattern(node, pattern):
+                if isinstance(selector, list) and len(selector) >= 2:
+                    target_id = selector[0]
+                    if target_id and target_id not in ("env", "sys") and target_id != nid:
+                        deps.add(target_id)
+        if deps:
+            node_deps[nid] = deps
+
+    # Build: node_id -> container_id (parent)
+    edge_node_to_container: dict[str, str] = {}
+    for n in spec.get("nodes", []) or []:
+        if isinstance(n, dict) and n.get("type") in ("iteration", "loop"):
+            for child_id in n.get("children", []) or []:
+                edge_node_to_container[child_id] = n["id"]
+
+    errors: list[str] = []
+    for nid, deps in node_deps.items():
+        for dep_id in deps:
+            # Skip if dep is the node's own container (container variables
+            # like loop.counter / iter.item are from the variable pool, not edges)
+            if edge_node_to_container.get(nid) == dep_id:
+                continue
+            # Check if there's a path dep_id -> ... -> nid via edges
+            if not _has_path(adjacency, dep_id, nid):
+                errors.append(
+                    f"node {nid!r}: references variable from {dep_id!r} but no edge connects "
+                    f"{dep_id!r} -> {nid!r} (directly or transitively). Add an edge."
+                )
+    return errors
+
+
+def _has_path(adjacency: dict[str, set[str]], src: str, dst: str, visited: set[str] | None = None) -> bool:
+    """BFS/DFS check: is there a path src -> ... -> dst in the edge graph?"""
+    if visited is None:
+        visited = set()
+    if src == dst:
+        return True
+    if src in visited:
+        return False
+    visited.add(src)
+    for neighbor in adjacency.get(src, set()):
+        if _has_path(adjacency, neighbor, dst, visited):
+            return True
+    return False
 
 
 def _check_edges(spec: dict[str, Any], nodes_by_id: dict[str, dict]) -> list[str]:
