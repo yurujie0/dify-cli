@@ -323,3 +323,57 @@ def test_validate_trigger_in_advanced_chat_rejected():
     }
     errors = validate_spec(spec)
     assert any("trigger-webhook" in e and "workflow" in e for e in errors)
+
+
+def test_validate_ifelse_case_id_false_rejected():
+    """case_id 'false' is the implicit else branch, not an explicit case."""
+    spec = _spec([
+        {"id": "start", "type": "start", "title": "S",
+         "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+        {"id": "ifelse", "type": "if-else", "title": "B",
+         "cases": [
+             {"case_id": "has_value", "logical_operator": "and",
+              "conditions": [{"variable_selector": ["start", "q"], "comparison_operator": "contains", "value": "x"}]},
+             {"case_id": "false", "logical_operator": "and", "conditions": []},
+         ]},
+        {"id": "end", "type": "end", "title": "E", "outputs": []},
+    ])
+    errors = validate_spec(spec)
+    assert any("case_id 'false'" in e and "implicit else" in e for e in errors)
+
+
+def test_validate_ifelse_edge_wrong_src_handle():
+    """src_handle must match a case_id in the if-else node."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "ifelse", "type": "if-else", "title": "B",
+             "cases": [{"case_id": "has_value", "logical_operator": "and",
+                        "conditions": [{"variable_selector": ["start", "q"], "comparison_operator": "contains", "value": "x"}]}]},
+            {"id": "end", "type": "end", "title": "E", "outputs": []},
+        ],
+        [
+            {"source": "ifelse", "target": "end", "src_handle": "true"},  # WRONG
+        ],
+    )
+    errors = validate_spec(spec)
+    assert any("src_handle 'true'" in e and "has_value" in e for e in errors)
+
+
+def test_validate_ifelse_edge_correct_src_handle_ok():
+    """src_handle matching case_id or 'false' is valid."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "ifelse", "type": "if-else", "title": "B",
+             "cases": [{"case_id": "has_value", "logical_operator": "and",
+                        "conditions": [{"variable_selector": ["start", "q"], "comparison_operator": "contains", "value": "x"}]}]},
+            {"id": "end", "type": "end", "title": "E", "outputs": []},
+        ],
+        [
+            {"source": "ifelse", "target": "end", "src_handle": "has_value"},  # OK
+        ],
+    )
+    assert validate_spec(spec) == []

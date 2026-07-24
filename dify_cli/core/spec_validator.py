@@ -190,6 +190,13 @@ def _check_hoisted_structure(spec: dict[str, Any]) -> list[str]:
                         f"node {nid!r} ({ntype}).{check['field']}[{i}]: "
                         f"missing required field {req!r}"
                     )
+            # if-else: case_id "false" is the implicit else branch, not a case
+            if ntype == "if-else" and item.get("case_id") == "false":
+                errors.append(
+                    f"node {nid!r} (if-else).cases[{i}]: case_id 'false' is the implicit else "
+                    f"branch - remove this case. The else branch is handled by edges with "
+                    f"src_handle='false', not by an explicit case."
+                )
             # Check sub-items (e.g. conditions inside cases)
             subfield = check.get("subfield")
             if subfield:
@@ -278,12 +285,23 @@ def _check_edges(spec: dict[str, Any], nodes_by_id: dict[str, dict]) -> list[str
             for child_id in n.get("children", []) or []:
                 node_to_container[child_id] = cid
 
+    # Build: if-else node_id -> set of valid case_ids
+    ifelse_handles: dict[str, set[str]] = {}
+    for n in spec.get("nodes", []) or []:
+        if isinstance(n, dict) and n.get("type") == "if-else":
+            cid = n["id"]
+            valid = {c.get("case_id") for c in (n.get("cases") or []) if isinstance(c, dict)}
+            valid.add("false")  # implicit else branch
+            valid.add("source")  # default handle (non-branch edge)
+            ifelse_handles[cid] = valid
+
     errors: list[str] = []
     for e in spec.get("edges", []) or []:
         if not isinstance(e, dict):
             continue
         src = e.get("source", "")
         dst = e.get("target", "")
+        src_handle = e.get("src_handle", "source")
 
         # Rule 1: container -> its own child is wrong (start node handles entry)
         if src in container_children and dst in container_children.get(src, set()):
@@ -300,6 +318,15 @@ def _check_edges(spec: dict[str, Any], nodes_by_id: dict[str, dict]) -> list[str
                 f"edge {src!r} -> {dst!r}: node {src!r} is inside container {src_container!r}, "
                 f"cannot connect to external node {dst!r}. Use {src_container!r} -> {dst!r} instead."
             )
+
+        # Rule 3: if-else src_handle must match a case_id or "false"
+        if src in ifelse_handles:
+            valid_handles = ifelse_handles[src]
+            if src_handle not in valid_handles:
+                errors.append(
+                    f"edge {src!r} -> {dst!r}: src_handle {src_handle!r} does not match any case_id "
+                    f"in if-else node {src!r}. Valid: {sorted(h for h in valid_handles if h != 'source')}"
+                )
 
     return errors
 
