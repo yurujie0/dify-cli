@@ -66,7 +66,7 @@ def validate_spec(spec: dict[str, Any]) -> list[str]:
         if not isinstance(node, dict):
             continue
         for path, selector in _extract_references(node):
-            errors.extend(_check_reference(node, path, selector, nodes_by_id))
+            errors.extend(_check_reference(node, path, selector, nodes_by_id, spec))
     errors.extend(_check_selector_format(spec))
 
     errors.extend(_check_variables(spec))
@@ -167,10 +167,10 @@ def _check_one_selector(selector: Any, nid: str, path: str, errors: list[str]) -
             )
             return
     # Check for dotted first element (e.g. ['sys.env.XXX', 'something'])
-    if "." in selector[0] and selector[0] not in ("env", "sys"):
+    if "." in selector[0] and selector[0] not in ("env", "sys", "conversation"):
         errors.append(
             f"node {nid!r}: {path}: selector first element should be a node id "
-            f"or 'env'/'sys', not a dotted path {selector[0]!r}. "
+            f"or 'env'/'sys'/'conversation', not a dotted path {selector[0]!r}. "
             f"Use ['env','VAR_NAME'] for env vars."
         )
 
@@ -368,7 +368,7 @@ def _check_edge_coverage(spec: dict[str, Any], nodes_by_id: dict[str, dict]) -> 
             for _path, selector in _walk_pattern(node, pattern):
                 if isinstance(selector, list) and len(selector) >= 2:
                     target_id = selector[0]
-                    if target_id and target_id not in ("env", "sys") and target_id != nid:
+                    if target_id and target_id not in ("env", "sys", "conversation") and target_id != nid:
                         deps.add(target_id)
         if deps:
             node_deps[nid] = deps
@@ -538,16 +538,40 @@ def _extract_template_refs(text: str) -> Iterator[tuple[str, str]]:
         yield (m.group(1), m.group(2))
 
 
+# Valid system variable keys (from core/workflow/enums.py SystemVariableKey).
+_SYS_VARS = {
+    "query", "files", "conversation_id", "user_id", "dialogue_count",
+    "app_id", "workflow_id", "workflow_run_id", "timestamp",
+    "document_id", "original_document_id", "batch",
+    "dataset_id", "datasource_type", "datasource_info", "invoke_from",
+}
+
+
 def _check_reference(
-    node: dict[str, Any], path: str, selector: list, nodes_by_id: dict
+    node: dict[str, Any], path: str, selector: list, nodes_by_id: dict,
+    spec: dict[str, Any] | None = None,
 ) -> list[str]:
     target_id = selector[0]
     var = selector[1] if len(selector) > 1 else ""
     nid = node.get("id", "?")
-    full = f"{nid}.fields.{path}" if path else f"{nid}.fields"
+    full = f"{nid}.{path}" if path else nid
 
-    # env/sys are built-in variable scopes, not nodes.
-    if target_id in ("env", "sys"):
+    # Built-in variable scopes - check the variable name exists.
+    if target_id == "env":
+        if spec is not None:
+            env_names = {ev.get("name") for ev in spec.get("environment_variables", []) or [] if isinstance(ev, dict)}
+            if var and var not in env_names:
+                return [f"{full}: env variable {var!r} not declared in spec.environment_variables"]
+        return []
+    if target_id == "sys":
+        if var and var not in _SYS_VARS:
+            return [f"{full}: invalid sys variable {var!r}. Valid: {sorted(_SYS_VARS)}"]
+        return []
+    if target_id == "conversation":
+        if spec is not None:
+            conv_names = {cv.get("name") for cv in spec.get("conversation_variables", []) or [] if isinstance(cv, dict)}
+            if var and var not in conv_names:
+                return [f"{full}: conversation variable {var!r} not declared in spec.conversation_variables"]
         return []
 
     target = nodes_by_id.get(target_id)

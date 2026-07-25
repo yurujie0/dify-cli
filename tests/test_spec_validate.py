@@ -28,6 +28,91 @@ def test_validate_clean_workflow():
     assert validate_spec(spec) == []
 
 
+def test_validate_undeclared_env_var_rejected():
+    """value_selector ['env','MISSING'] where MISSING not in environment_variables."""
+    spec = {
+        "mode": "workflow", "name": "T", "dsl_version": "0.5.0",
+        "environment_variables": [{"name": "API_KEY", "value": "v", "value_type": "string"}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "key", "value_selector": ["env", "MISSING"]}],  # not declared
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "out", "value_selector": ["code", "r"]}]},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "end"}],
+    }
+    errors = validate_spec(spec)
+    assert any("env variable 'MISSING'" in e and "not declared" in e for e in errors)
+
+
+def test_validate_declared_env_var_ok():
+    """value_selector ['env','API_KEY'] where API_KEY is declared."""
+    spec = {
+        "mode": "workflow", "name": "T", "dsl_version": "0.5.0",
+        "environment_variables": [{"name": "API_KEY", "value": "v", "value_type": "string"}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "key", "value_selector": ["env", "API_KEY"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "out", "value_selector": ["code", "r"]}]},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "end"}],
+    }
+    assert validate_spec(spec) == []
+
+
+def test_validate_invalid_sys_var_rejected():
+    """value_selector ['sys','bogus'] where bogus is not a valid system variable."""
+    spec = _spec([
+        {"id": "start", "type": "start", "title": "S"},
+        {"id": "code", "type": "code", "title": "C",
+         "variables": [{"variable": "q", "value_selector": ["sys", "bogus"]}],  # invalid
+         "outputs": {"r": {"type": "string"}}},
+        {"id": "end", "type": "end", "title": "E", "outputs": []},
+    ])
+    errors = validate_spec(spec)
+    assert any("invalid sys variable 'bogus'" in e for e in errors)
+
+
+def test_validate_undeclared_conversation_var_rejected():
+    """value_selector ['conversation','MISSING'] where MISSING not in conversation_variables."""
+    spec = {
+        "mode": "advanced-chat", "name": "T", "dsl_version": "0.5.0",
+        "conversation_variables": [{"name": "memory", "value_type": "string", "description": ""}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "m", "value_selector": ["conversation", "MISSING"]}],  # not declared
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "answer", "type": "answer", "title": "A", "implementation_hint": "reply"},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "answer"}],
+    }
+    errors = validate_spec(spec)
+    assert any("conversation variable 'MISSING'" in e and "not declared" in e for e in errors)
+
+
+def test_validate_declared_conversation_var_ok():
+    """value_selector ['conversation','memory'] where memory is declared."""
+    spec = {
+        "mode": "advanced-chat", "name": "T", "dsl_version": "0.5.0",
+        "conversation_variables": [{"name": "memory", "value_type": "string", "description": ""}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "m", "value_selector": ["conversation", "memory"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "answer", "type": "answer", "title": "A", "implementation_hint": "reply"},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "answer"}],
+    }
+    assert validate_spec(spec) == []
+
+
 def test_validate_single_element_selector_rejected():
     """value_selector ['sys.env.XXX'] is wrong - should be ['env','XXX']."""
     spec = _spec([
@@ -57,9 +142,11 @@ def test_validate_dotted_first_element_rejected():
 
 
 def test_validate_correct_env_selector_ok():
-    """value_selector ['env','KEY'] is correct."""
-    spec = _spec(
-        [
+    """value_selector ['env','KEY'] is correct (KEY declared in env vars)."""
+    spec = {
+        "mode": "workflow", "name": "T", "dsl_version": "0.5.0",
+        "environment_variables": [{"name": "KEY", "value": "v", "value_type": "string"}],
+        "nodes": [
             {"id": "start", "type": "start", "title": "S",
              "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
             {"id": "code", "type": "code", "title": "C",
@@ -68,11 +155,96 @@ def test_validate_correct_env_selector_ok():
             {"id": "end", "type": "end", "title": "E",
              "outputs": [{"variable": "out", "value_selector": ["code", "r"]}]},
         ],
-        [
+        "edges": [
             {"source": "start", "target": "code"},
             {"source": "code", "target": "end"},
         ],
-    )
+    }
+    assert validate_spec(spec) == []
+
+
+def test_validate_undeclared_env_var_rejected():
+    """value_selector ['env','MISSING'] where MISSING not in environment_variables."""
+    spec = {
+        "mode": "workflow", "name": "T", "dsl_version": "0.5.0",
+        "environment_variables": [{"name": "API_KEY", "value": "v", "value_type": "string"}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "key", "value_selector": ["env", "MISSING"]}],  # not declared
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "out", "value_selector": ["code", "r"]}]},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "end"}],
+    }
+    errors = validate_spec(spec)
+    assert any("env variable 'MISSING'" in e and "not declared" in e for e in errors)
+
+
+def test_validate_declared_env_var_ok():
+    """value_selector ['env','API_KEY'] where API_KEY is declared."""
+    spec = {
+        "mode": "workflow", "name": "T", "dsl_version": "0.5.0",
+        "environment_variables": [{"name": "API_KEY", "value": "v", "value_type": "string"}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "key", "value_selector": ["env", "API_KEY"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "out", "value_selector": ["code", "r"]}]},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "end"}],
+    }
+    assert validate_spec(spec) == []
+
+
+def test_validate_invalid_sys_var_rejected():
+    """value_selector ['sys','bogus'] where bogus is not a valid system variable."""
+    spec = _spec([
+        {"id": "start", "type": "start", "title": "S"},
+        {"id": "code", "type": "code", "title": "C",
+         "variables": [{"variable": "q", "value_selector": ["sys", "bogus"]}],  # invalid
+         "outputs": {"r": {"type": "string"}}},
+        {"id": "end", "type": "end", "title": "E", "outputs": []},
+    ])
+    errors = validate_spec(spec)
+    assert any("invalid sys variable 'bogus'" in e for e in errors)
+
+
+def test_validate_undeclared_conversation_var_rejected():
+    """value_selector ['conversation','MISSING'] where MISSING not in conversation_variables."""
+    spec = {
+        "mode": "advanced-chat", "name": "T", "dsl_version": "0.5.0",
+        "conversation_variables": [{"name": "memory", "value_type": "string", "description": ""}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "m", "value_selector": ["conversation", "MISSING"]}],  # not declared
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "answer", "type": "answer", "title": "A", "implementation_hint": "reply"},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "answer"}],
+    }
+    errors = validate_spec(spec)
+    assert any("conversation variable 'MISSING'" in e and "not declared" in e for e in errors)
+
+
+def test_validate_declared_conversation_var_ok():
+    """value_selector ['conversation','memory'] where memory is declared."""
+    spec = {
+        "mode": "advanced-chat", "name": "T", "dsl_version": "0.5.0",
+        "conversation_variables": [{"name": "memory", "value_type": "string", "description": ""}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "m", "value_selector": ["conversation", "memory"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "answer", "type": "answer", "title": "A", "implementation_hint": "reply"},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "answer"}],
+    }
     assert validate_spec(spec) == []
 
 
@@ -124,6 +296,91 @@ def test_validate_edge_coverage_ok():
     assert validate_spec(spec) == []
 
 
+def test_validate_undeclared_env_var_rejected():
+    """value_selector ['env','MISSING'] where MISSING not in environment_variables."""
+    spec = {
+        "mode": "workflow", "name": "T", "dsl_version": "0.5.0",
+        "environment_variables": [{"name": "API_KEY", "value": "v", "value_type": "string"}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "key", "value_selector": ["env", "MISSING"]}],  # not declared
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "out", "value_selector": ["code", "r"]}]},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "end"}],
+    }
+    errors = validate_spec(spec)
+    assert any("env variable 'MISSING'" in e and "not declared" in e for e in errors)
+
+
+def test_validate_declared_env_var_ok():
+    """value_selector ['env','API_KEY'] where API_KEY is declared."""
+    spec = {
+        "mode": "workflow", "name": "T", "dsl_version": "0.5.0",
+        "environment_variables": [{"name": "API_KEY", "value": "v", "value_type": "string"}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "key", "value_selector": ["env", "API_KEY"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "out", "value_selector": ["code", "r"]}]},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "end"}],
+    }
+    assert validate_spec(spec) == []
+
+
+def test_validate_invalid_sys_var_rejected():
+    """value_selector ['sys','bogus'] where bogus is not a valid system variable."""
+    spec = _spec([
+        {"id": "start", "type": "start", "title": "S"},
+        {"id": "code", "type": "code", "title": "C",
+         "variables": [{"variable": "q", "value_selector": ["sys", "bogus"]}],  # invalid
+         "outputs": {"r": {"type": "string"}}},
+        {"id": "end", "type": "end", "title": "E", "outputs": []},
+    ])
+    errors = validate_spec(spec)
+    assert any("invalid sys variable 'bogus'" in e for e in errors)
+
+
+def test_validate_undeclared_conversation_var_rejected():
+    """value_selector ['conversation','MISSING'] where MISSING not in conversation_variables."""
+    spec = {
+        "mode": "advanced-chat", "name": "T", "dsl_version": "0.5.0",
+        "conversation_variables": [{"name": "memory", "value_type": "string", "description": ""}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "m", "value_selector": ["conversation", "MISSING"]}],  # not declared
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "answer", "type": "answer", "title": "A", "implementation_hint": "reply"},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "answer"}],
+    }
+    errors = validate_spec(spec)
+    assert any("conversation variable 'MISSING'" in e and "not declared" in e for e in errors)
+
+
+def test_validate_declared_conversation_var_ok():
+    """value_selector ['conversation','memory'] where memory is declared."""
+    spec = {
+        "mode": "advanced-chat", "name": "T", "dsl_version": "0.5.0",
+        "conversation_variables": [{"name": "memory", "value_type": "string", "description": ""}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "m", "value_selector": ["conversation", "memory"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "answer", "type": "answer", "title": "A", "implementation_hint": "reply"},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "answer"}],
+    }
+    assert validate_spec(spec) == []
+
+
 def test_validate_single_element_selector_rejected():
     """value_selector ['sys.env.XXX'] is wrong - should be ['env','XXX']."""
     spec = _spec([
@@ -169,6 +426,91 @@ def test_validate_correct_env_selector_ok():
             {"source": "code", "target": "end"},
         ],
     )
+    assert validate_spec(spec) == []
+
+
+def test_validate_undeclared_env_var_rejected():
+    """value_selector ['env','MISSING'] where MISSING not in environment_variables."""
+    spec = {
+        "mode": "workflow", "name": "T", "dsl_version": "0.5.0",
+        "environment_variables": [{"name": "API_KEY", "value": "v", "value_type": "string"}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "key", "value_selector": ["env", "MISSING"]}],  # not declared
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "out", "value_selector": ["code", "r"]}]},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "end"}],
+    }
+    errors = validate_spec(spec)
+    assert any("env variable 'MISSING'" in e and "not declared" in e for e in errors)
+
+
+def test_validate_declared_env_var_ok():
+    """value_selector ['env','API_KEY'] where API_KEY is declared."""
+    spec = {
+        "mode": "workflow", "name": "T", "dsl_version": "0.5.0",
+        "environment_variables": [{"name": "API_KEY", "value": "v", "value_type": "string"}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "key", "value_selector": ["env", "API_KEY"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "out", "value_selector": ["code", "r"]}]},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "end"}],
+    }
+    assert validate_spec(spec) == []
+
+
+def test_validate_invalid_sys_var_rejected():
+    """value_selector ['sys','bogus'] where bogus is not a valid system variable."""
+    spec = _spec([
+        {"id": "start", "type": "start", "title": "S"},
+        {"id": "code", "type": "code", "title": "C",
+         "variables": [{"variable": "q", "value_selector": ["sys", "bogus"]}],  # invalid
+         "outputs": {"r": {"type": "string"}}},
+        {"id": "end", "type": "end", "title": "E", "outputs": []},
+    ])
+    errors = validate_spec(spec)
+    assert any("invalid sys variable 'bogus'" in e for e in errors)
+
+
+def test_validate_undeclared_conversation_var_rejected():
+    """value_selector ['conversation','MISSING'] where MISSING not in conversation_variables."""
+    spec = {
+        "mode": "advanced-chat", "name": "T", "dsl_version": "0.5.0",
+        "conversation_variables": [{"name": "memory", "value_type": "string", "description": ""}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "m", "value_selector": ["conversation", "MISSING"]}],  # not declared
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "answer", "type": "answer", "title": "A", "implementation_hint": "reply"},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "answer"}],
+    }
+    errors = validate_spec(spec)
+    assert any("conversation variable 'MISSING'" in e and "not declared" in e for e in errors)
+
+
+def test_validate_declared_conversation_var_ok():
+    """value_selector ['conversation','memory'] where memory is declared."""
+    spec = {
+        "mode": "advanced-chat", "name": "T", "dsl_version": "0.5.0",
+        "conversation_variables": [{"name": "memory", "value_type": "string", "description": ""}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "m", "value_selector": ["conversation", "memory"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "answer", "type": "answer", "title": "A", "implementation_hint": "reply"},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "answer"}],
+    }
     assert validate_spec(spec) == []
 
 
@@ -193,6 +535,91 @@ def test_validate_edge_coverage_transitive_ok():
     assert validate_spec(spec) == []
 
 
+def test_validate_undeclared_env_var_rejected():
+    """value_selector ['env','MISSING'] where MISSING not in environment_variables."""
+    spec = {
+        "mode": "workflow", "name": "T", "dsl_version": "0.5.0",
+        "environment_variables": [{"name": "API_KEY", "value": "v", "value_type": "string"}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "key", "value_selector": ["env", "MISSING"]}],  # not declared
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "out", "value_selector": ["code", "r"]}]},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "end"}],
+    }
+    errors = validate_spec(spec)
+    assert any("env variable 'MISSING'" in e and "not declared" in e for e in errors)
+
+
+def test_validate_declared_env_var_ok():
+    """value_selector ['env','API_KEY'] where API_KEY is declared."""
+    spec = {
+        "mode": "workflow", "name": "T", "dsl_version": "0.5.0",
+        "environment_variables": [{"name": "API_KEY", "value": "v", "value_type": "string"}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "key", "value_selector": ["env", "API_KEY"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "out", "value_selector": ["code", "r"]}]},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "end"}],
+    }
+    assert validate_spec(spec) == []
+
+
+def test_validate_invalid_sys_var_rejected():
+    """value_selector ['sys','bogus'] where bogus is not a valid system variable."""
+    spec = _spec([
+        {"id": "start", "type": "start", "title": "S"},
+        {"id": "code", "type": "code", "title": "C",
+         "variables": [{"variable": "q", "value_selector": ["sys", "bogus"]}],  # invalid
+         "outputs": {"r": {"type": "string"}}},
+        {"id": "end", "type": "end", "title": "E", "outputs": []},
+    ])
+    errors = validate_spec(spec)
+    assert any("invalid sys variable 'bogus'" in e for e in errors)
+
+
+def test_validate_undeclared_conversation_var_rejected():
+    """value_selector ['conversation','MISSING'] where MISSING not in conversation_variables."""
+    spec = {
+        "mode": "advanced-chat", "name": "T", "dsl_version": "0.5.0",
+        "conversation_variables": [{"name": "memory", "value_type": "string", "description": ""}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "m", "value_selector": ["conversation", "MISSING"]}],  # not declared
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "answer", "type": "answer", "title": "A", "implementation_hint": "reply"},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "answer"}],
+    }
+    errors = validate_spec(spec)
+    assert any("conversation variable 'MISSING'" in e and "not declared" in e for e in errors)
+
+
+def test_validate_declared_conversation_var_ok():
+    """value_selector ['conversation','memory'] where memory is declared."""
+    spec = {
+        "mode": "advanced-chat", "name": "T", "dsl_version": "0.5.0",
+        "conversation_variables": [{"name": "memory", "value_type": "string", "description": ""}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "m", "value_selector": ["conversation", "memory"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "answer", "type": "answer", "title": "A", "implementation_hint": "reply"},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "answer"}],
+    }
+    assert validate_spec(spec) == []
+
+
 def test_validate_single_element_selector_rejected():
     """value_selector ['sys.env.XXX'] is wrong - should be ['env','XXX']."""
     spec = _spec([
@@ -238,6 +665,91 @@ def test_validate_correct_env_selector_ok():
             {"source": "code", "target": "end"},
         ],
     )
+    assert validate_spec(spec) == []
+
+
+def test_validate_undeclared_env_var_rejected():
+    """value_selector ['env','MISSING'] where MISSING not in environment_variables."""
+    spec = {
+        "mode": "workflow", "name": "T", "dsl_version": "0.5.0",
+        "environment_variables": [{"name": "API_KEY", "value": "v", "value_type": "string"}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "key", "value_selector": ["env", "MISSING"]}],  # not declared
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "out", "value_selector": ["code", "r"]}]},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "end"}],
+    }
+    errors = validate_spec(spec)
+    assert any("env variable 'MISSING'" in e and "not declared" in e for e in errors)
+
+
+def test_validate_declared_env_var_ok():
+    """value_selector ['env','API_KEY'] where API_KEY is declared."""
+    spec = {
+        "mode": "workflow", "name": "T", "dsl_version": "0.5.0",
+        "environment_variables": [{"name": "API_KEY", "value": "v", "value_type": "string"}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "key", "value_selector": ["env", "API_KEY"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "out", "value_selector": ["code", "r"]}]},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "end"}],
+    }
+    assert validate_spec(spec) == []
+
+
+def test_validate_invalid_sys_var_rejected():
+    """value_selector ['sys','bogus'] where bogus is not a valid system variable."""
+    spec = _spec([
+        {"id": "start", "type": "start", "title": "S"},
+        {"id": "code", "type": "code", "title": "C",
+         "variables": [{"variable": "q", "value_selector": ["sys", "bogus"]}],  # invalid
+         "outputs": {"r": {"type": "string"}}},
+        {"id": "end", "type": "end", "title": "E", "outputs": []},
+    ])
+    errors = validate_spec(spec)
+    assert any("invalid sys variable 'bogus'" in e for e in errors)
+
+
+def test_validate_undeclared_conversation_var_rejected():
+    """value_selector ['conversation','MISSING'] where MISSING not in conversation_variables."""
+    spec = {
+        "mode": "advanced-chat", "name": "T", "dsl_version": "0.5.0",
+        "conversation_variables": [{"name": "memory", "value_type": "string", "description": ""}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "m", "value_selector": ["conversation", "MISSING"]}],  # not declared
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "answer", "type": "answer", "title": "A", "implementation_hint": "reply"},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "answer"}],
+    }
+    errors = validate_spec(spec)
+    assert any("conversation variable 'MISSING'" in e and "not declared" in e for e in errors)
+
+
+def test_validate_declared_conversation_var_ok():
+    """value_selector ['conversation','memory'] where memory is declared."""
+    spec = {
+        "mode": "advanced-chat", "name": "T", "dsl_version": "0.5.0",
+        "conversation_variables": [{"name": "memory", "value_type": "string", "description": ""}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "m", "value_selector": ["conversation", "memory"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "answer", "type": "answer", "title": "A", "implementation_hint": "reply"},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "answer"}],
+    }
     assert validate_spec(spec) == []
 
 
@@ -301,6 +813,91 @@ def test_validate_iteration_output_selector_can_reference_child():
     assert validate_spec(spec) == []
 
 
+def test_validate_undeclared_env_var_rejected():
+    """value_selector ['env','MISSING'] where MISSING not in environment_variables."""
+    spec = {
+        "mode": "workflow", "name": "T", "dsl_version": "0.5.0",
+        "environment_variables": [{"name": "API_KEY", "value": "v", "value_type": "string"}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "key", "value_selector": ["env", "MISSING"]}],  # not declared
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "out", "value_selector": ["code", "r"]}]},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "end"}],
+    }
+    errors = validate_spec(spec)
+    assert any("env variable 'MISSING'" in e and "not declared" in e for e in errors)
+
+
+def test_validate_declared_env_var_ok():
+    """value_selector ['env','API_KEY'] where API_KEY is declared."""
+    spec = {
+        "mode": "workflow", "name": "T", "dsl_version": "0.5.0",
+        "environment_variables": [{"name": "API_KEY", "value": "v", "value_type": "string"}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "key", "value_selector": ["env", "API_KEY"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "out", "value_selector": ["code", "r"]}]},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "end"}],
+    }
+    assert validate_spec(spec) == []
+
+
+def test_validate_invalid_sys_var_rejected():
+    """value_selector ['sys','bogus'] where bogus is not a valid system variable."""
+    spec = _spec([
+        {"id": "start", "type": "start", "title": "S"},
+        {"id": "code", "type": "code", "title": "C",
+         "variables": [{"variable": "q", "value_selector": ["sys", "bogus"]}],  # invalid
+         "outputs": {"r": {"type": "string"}}},
+        {"id": "end", "type": "end", "title": "E", "outputs": []},
+    ])
+    errors = validate_spec(spec)
+    assert any("invalid sys variable 'bogus'" in e for e in errors)
+
+
+def test_validate_undeclared_conversation_var_rejected():
+    """value_selector ['conversation','MISSING'] where MISSING not in conversation_variables."""
+    spec = {
+        "mode": "advanced-chat", "name": "T", "dsl_version": "0.5.0",
+        "conversation_variables": [{"name": "memory", "value_type": "string", "description": ""}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "m", "value_selector": ["conversation", "MISSING"]}],  # not declared
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "answer", "type": "answer", "title": "A", "implementation_hint": "reply"},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "answer"}],
+    }
+    errors = validate_spec(spec)
+    assert any("conversation variable 'MISSING'" in e and "not declared" in e for e in errors)
+
+
+def test_validate_declared_conversation_var_ok():
+    """value_selector ['conversation','memory'] where memory is declared."""
+    spec = {
+        "mode": "advanced-chat", "name": "T", "dsl_version": "0.5.0",
+        "conversation_variables": [{"name": "memory", "value_type": "string", "description": ""}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "m", "value_selector": ["conversation", "memory"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "answer", "type": "answer", "title": "A", "implementation_hint": "reply"},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "answer"}],
+    }
+    assert validate_spec(spec) == []
+
+
 def test_validate_single_element_selector_rejected():
     """value_selector ['sys.env.XXX'] is wrong - should be ['env','XXX']."""
     spec = _spec([
@@ -346,6 +943,91 @@ def test_validate_correct_env_selector_ok():
             {"source": "code", "target": "end"},
         ],
     )
+    assert validate_spec(spec) == []
+
+
+def test_validate_undeclared_env_var_rejected():
+    """value_selector ['env','MISSING'] where MISSING not in environment_variables."""
+    spec = {
+        "mode": "workflow", "name": "T", "dsl_version": "0.5.0",
+        "environment_variables": [{"name": "API_KEY", "value": "v", "value_type": "string"}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "key", "value_selector": ["env", "MISSING"]}],  # not declared
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "out", "value_selector": ["code", "r"]}]},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "end"}],
+    }
+    errors = validate_spec(spec)
+    assert any("env variable 'MISSING'" in e and "not declared" in e for e in errors)
+
+
+def test_validate_declared_env_var_ok():
+    """value_selector ['env','API_KEY'] where API_KEY is declared."""
+    spec = {
+        "mode": "workflow", "name": "T", "dsl_version": "0.5.0",
+        "environment_variables": [{"name": "API_KEY", "value": "v", "value_type": "string"}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "key", "value_selector": ["env", "API_KEY"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "out", "value_selector": ["code", "r"]}]},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "end"}],
+    }
+    assert validate_spec(spec) == []
+
+
+def test_validate_invalid_sys_var_rejected():
+    """value_selector ['sys','bogus'] where bogus is not a valid system variable."""
+    spec = _spec([
+        {"id": "start", "type": "start", "title": "S"},
+        {"id": "code", "type": "code", "title": "C",
+         "variables": [{"variable": "q", "value_selector": ["sys", "bogus"]}],  # invalid
+         "outputs": {"r": {"type": "string"}}},
+        {"id": "end", "type": "end", "title": "E", "outputs": []},
+    ])
+    errors = validate_spec(spec)
+    assert any("invalid sys variable 'bogus'" in e for e in errors)
+
+
+def test_validate_undeclared_conversation_var_rejected():
+    """value_selector ['conversation','MISSING'] where MISSING not in conversation_variables."""
+    spec = {
+        "mode": "advanced-chat", "name": "T", "dsl_version": "0.5.0",
+        "conversation_variables": [{"name": "memory", "value_type": "string", "description": ""}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "m", "value_selector": ["conversation", "MISSING"]}],  # not declared
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "answer", "type": "answer", "title": "A", "implementation_hint": "reply"},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "answer"}],
+    }
+    errors = validate_spec(spec)
+    assert any("conversation variable 'MISSING'" in e and "not declared" in e for e in errors)
+
+
+def test_validate_declared_conversation_var_ok():
+    """value_selector ['conversation','memory'] where memory is declared."""
+    spec = {
+        "mode": "advanced-chat", "name": "T", "dsl_version": "0.5.0",
+        "conversation_variables": [{"name": "memory", "value_type": "string", "description": ""}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "m", "value_selector": ["conversation", "memory"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "answer", "type": "answer", "title": "A", "implementation_hint": "reply"},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "answer"}],
+    }
     assert validate_spec(spec) == []
 
 
@@ -397,6 +1079,91 @@ def test_validate_edge_coverage_ok():
     assert validate_spec(spec) == []
 
 
+def test_validate_undeclared_env_var_rejected():
+    """value_selector ['env','MISSING'] where MISSING not in environment_variables."""
+    spec = {
+        "mode": "workflow", "name": "T", "dsl_version": "0.5.0",
+        "environment_variables": [{"name": "API_KEY", "value": "v", "value_type": "string"}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "key", "value_selector": ["env", "MISSING"]}],  # not declared
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "out", "value_selector": ["code", "r"]}]},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "end"}],
+    }
+    errors = validate_spec(spec)
+    assert any("env variable 'MISSING'" in e and "not declared" in e for e in errors)
+
+
+def test_validate_declared_env_var_ok():
+    """value_selector ['env','API_KEY'] where API_KEY is declared."""
+    spec = {
+        "mode": "workflow", "name": "T", "dsl_version": "0.5.0",
+        "environment_variables": [{"name": "API_KEY", "value": "v", "value_type": "string"}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "key", "value_selector": ["env", "API_KEY"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "out", "value_selector": ["code", "r"]}]},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "end"}],
+    }
+    assert validate_spec(spec) == []
+
+
+def test_validate_invalid_sys_var_rejected():
+    """value_selector ['sys','bogus'] where bogus is not a valid system variable."""
+    spec = _spec([
+        {"id": "start", "type": "start", "title": "S"},
+        {"id": "code", "type": "code", "title": "C",
+         "variables": [{"variable": "q", "value_selector": ["sys", "bogus"]}],  # invalid
+         "outputs": {"r": {"type": "string"}}},
+        {"id": "end", "type": "end", "title": "E", "outputs": []},
+    ])
+    errors = validate_spec(spec)
+    assert any("invalid sys variable 'bogus'" in e for e in errors)
+
+
+def test_validate_undeclared_conversation_var_rejected():
+    """value_selector ['conversation','MISSING'] where MISSING not in conversation_variables."""
+    spec = {
+        "mode": "advanced-chat", "name": "T", "dsl_version": "0.5.0",
+        "conversation_variables": [{"name": "memory", "value_type": "string", "description": ""}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "m", "value_selector": ["conversation", "MISSING"]}],  # not declared
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "answer", "type": "answer", "title": "A", "implementation_hint": "reply"},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "answer"}],
+    }
+    errors = validate_spec(spec)
+    assert any("conversation variable 'MISSING'" in e and "not declared" in e for e in errors)
+
+
+def test_validate_declared_conversation_var_ok():
+    """value_selector ['conversation','memory'] where memory is declared."""
+    spec = {
+        "mode": "advanced-chat", "name": "T", "dsl_version": "0.5.0",
+        "conversation_variables": [{"name": "memory", "value_type": "string", "description": ""}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "m", "value_selector": ["conversation", "memory"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "answer", "type": "answer", "title": "A", "implementation_hint": "reply"},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "answer"}],
+    }
+    assert validate_spec(spec) == []
+
+
 def test_validate_single_element_selector_rejected():
     """value_selector ['sys.env.XXX'] is wrong - should be ['env','XXX']."""
     spec = _spec([
@@ -442,6 +1209,91 @@ def test_validate_correct_env_selector_ok():
             {"source": "code", "target": "end"},
         ],
     )
+    assert validate_spec(spec) == []
+
+
+def test_validate_undeclared_env_var_rejected():
+    """value_selector ['env','MISSING'] where MISSING not in environment_variables."""
+    spec = {
+        "mode": "workflow", "name": "T", "dsl_version": "0.5.0",
+        "environment_variables": [{"name": "API_KEY", "value": "v", "value_type": "string"}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "key", "value_selector": ["env", "MISSING"]}],  # not declared
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "out", "value_selector": ["code", "r"]}]},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "end"}],
+    }
+    errors = validate_spec(spec)
+    assert any("env variable 'MISSING'" in e and "not declared" in e for e in errors)
+
+
+def test_validate_declared_env_var_ok():
+    """value_selector ['env','API_KEY'] where API_KEY is declared."""
+    spec = {
+        "mode": "workflow", "name": "T", "dsl_version": "0.5.0",
+        "environment_variables": [{"name": "API_KEY", "value": "v", "value_type": "string"}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "key", "value_selector": ["env", "API_KEY"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "out", "value_selector": ["code", "r"]}]},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "end"}],
+    }
+    assert validate_spec(spec) == []
+
+
+def test_validate_invalid_sys_var_rejected():
+    """value_selector ['sys','bogus'] where bogus is not a valid system variable."""
+    spec = _spec([
+        {"id": "start", "type": "start", "title": "S"},
+        {"id": "code", "type": "code", "title": "C",
+         "variables": [{"variable": "q", "value_selector": ["sys", "bogus"]}],  # invalid
+         "outputs": {"r": {"type": "string"}}},
+        {"id": "end", "type": "end", "title": "E", "outputs": []},
+    ])
+    errors = validate_spec(spec)
+    assert any("invalid sys variable 'bogus'" in e for e in errors)
+
+
+def test_validate_undeclared_conversation_var_rejected():
+    """value_selector ['conversation','MISSING'] where MISSING not in conversation_variables."""
+    spec = {
+        "mode": "advanced-chat", "name": "T", "dsl_version": "0.5.0",
+        "conversation_variables": [{"name": "memory", "value_type": "string", "description": ""}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "m", "value_selector": ["conversation", "MISSING"]}],  # not declared
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "answer", "type": "answer", "title": "A", "implementation_hint": "reply"},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "answer"}],
+    }
+    errors = validate_spec(spec)
+    assert any("conversation variable 'MISSING'" in e and "not declared" in e for e in errors)
+
+
+def test_validate_declared_conversation_var_ok():
+    """value_selector ['conversation','memory'] where memory is declared."""
+    spec = {
+        "mode": "advanced-chat", "name": "T", "dsl_version": "0.5.0",
+        "conversation_variables": [{"name": "memory", "value_type": "string", "description": ""}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "m", "value_selector": ["conversation", "memory"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "answer", "type": "answer", "title": "A", "implementation_hint": "reply"},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "answer"}],
+    }
     assert validate_spec(spec) == []
 
 
@@ -466,6 +1318,91 @@ def test_validate_edge_coverage_transitive_ok():
     assert validate_spec(spec) == []
 
 
+def test_validate_undeclared_env_var_rejected():
+    """value_selector ['env','MISSING'] where MISSING not in environment_variables."""
+    spec = {
+        "mode": "workflow", "name": "T", "dsl_version": "0.5.0",
+        "environment_variables": [{"name": "API_KEY", "value": "v", "value_type": "string"}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "key", "value_selector": ["env", "MISSING"]}],  # not declared
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "out", "value_selector": ["code", "r"]}]},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "end"}],
+    }
+    errors = validate_spec(spec)
+    assert any("env variable 'MISSING'" in e and "not declared" in e for e in errors)
+
+
+def test_validate_declared_env_var_ok():
+    """value_selector ['env','API_KEY'] where API_KEY is declared."""
+    spec = {
+        "mode": "workflow", "name": "T", "dsl_version": "0.5.0",
+        "environment_variables": [{"name": "API_KEY", "value": "v", "value_type": "string"}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "key", "value_selector": ["env", "API_KEY"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "out", "value_selector": ["code", "r"]}]},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "end"}],
+    }
+    assert validate_spec(spec) == []
+
+
+def test_validate_invalid_sys_var_rejected():
+    """value_selector ['sys','bogus'] where bogus is not a valid system variable."""
+    spec = _spec([
+        {"id": "start", "type": "start", "title": "S"},
+        {"id": "code", "type": "code", "title": "C",
+         "variables": [{"variable": "q", "value_selector": ["sys", "bogus"]}],  # invalid
+         "outputs": {"r": {"type": "string"}}},
+        {"id": "end", "type": "end", "title": "E", "outputs": []},
+    ])
+    errors = validate_spec(spec)
+    assert any("invalid sys variable 'bogus'" in e for e in errors)
+
+
+def test_validate_undeclared_conversation_var_rejected():
+    """value_selector ['conversation','MISSING'] where MISSING not in conversation_variables."""
+    spec = {
+        "mode": "advanced-chat", "name": "T", "dsl_version": "0.5.0",
+        "conversation_variables": [{"name": "memory", "value_type": "string", "description": ""}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "m", "value_selector": ["conversation", "MISSING"]}],  # not declared
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "answer", "type": "answer", "title": "A", "implementation_hint": "reply"},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "answer"}],
+    }
+    errors = validate_spec(spec)
+    assert any("conversation variable 'MISSING'" in e and "not declared" in e for e in errors)
+
+
+def test_validate_declared_conversation_var_ok():
+    """value_selector ['conversation','memory'] where memory is declared."""
+    spec = {
+        "mode": "advanced-chat", "name": "T", "dsl_version": "0.5.0",
+        "conversation_variables": [{"name": "memory", "value_type": "string", "description": ""}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "m", "value_selector": ["conversation", "memory"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "answer", "type": "answer", "title": "A", "implementation_hint": "reply"},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "answer"}],
+    }
+    assert validate_spec(spec) == []
+
+
 def test_validate_single_element_selector_rejected():
     """value_selector ['sys.env.XXX'] is wrong - should be ['env','XXX']."""
     spec = _spec([
@@ -511,6 +1448,91 @@ def test_validate_correct_env_selector_ok():
             {"source": "code", "target": "end"},
         ],
     )
+    assert validate_spec(spec) == []
+
+
+def test_validate_undeclared_env_var_rejected():
+    """value_selector ['env','MISSING'] where MISSING not in environment_variables."""
+    spec = {
+        "mode": "workflow", "name": "T", "dsl_version": "0.5.0",
+        "environment_variables": [{"name": "API_KEY", "value": "v", "value_type": "string"}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "key", "value_selector": ["env", "MISSING"]}],  # not declared
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "out", "value_selector": ["code", "r"]}]},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "end"}],
+    }
+    errors = validate_spec(spec)
+    assert any("env variable 'MISSING'" in e and "not declared" in e for e in errors)
+
+
+def test_validate_declared_env_var_ok():
+    """value_selector ['env','API_KEY'] where API_KEY is declared."""
+    spec = {
+        "mode": "workflow", "name": "T", "dsl_version": "0.5.0",
+        "environment_variables": [{"name": "API_KEY", "value": "v", "value_type": "string"}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "key", "value_selector": ["env", "API_KEY"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "out", "value_selector": ["code", "r"]}]},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "end"}],
+    }
+    assert validate_spec(spec) == []
+
+
+def test_validate_invalid_sys_var_rejected():
+    """value_selector ['sys','bogus'] where bogus is not a valid system variable."""
+    spec = _spec([
+        {"id": "start", "type": "start", "title": "S"},
+        {"id": "code", "type": "code", "title": "C",
+         "variables": [{"variable": "q", "value_selector": ["sys", "bogus"]}],  # invalid
+         "outputs": {"r": {"type": "string"}}},
+        {"id": "end", "type": "end", "title": "E", "outputs": []},
+    ])
+    errors = validate_spec(spec)
+    assert any("invalid sys variable 'bogus'" in e for e in errors)
+
+
+def test_validate_undeclared_conversation_var_rejected():
+    """value_selector ['conversation','MISSING'] where MISSING not in conversation_variables."""
+    spec = {
+        "mode": "advanced-chat", "name": "T", "dsl_version": "0.5.0",
+        "conversation_variables": [{"name": "memory", "value_type": "string", "description": ""}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "m", "value_selector": ["conversation", "MISSING"]}],  # not declared
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "answer", "type": "answer", "title": "A", "implementation_hint": "reply"},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "answer"}],
+    }
+    errors = validate_spec(spec)
+    assert any("conversation variable 'MISSING'" in e and "not declared" in e for e in errors)
+
+
+def test_validate_declared_conversation_var_ok():
+    """value_selector ['conversation','memory'] where memory is declared."""
+    spec = {
+        "mode": "advanced-chat", "name": "T", "dsl_version": "0.5.0",
+        "conversation_variables": [{"name": "memory", "value_type": "string", "description": ""}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "m", "value_selector": ["conversation", "memory"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "answer", "type": "answer", "title": "A", "implementation_hint": "reply"},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "answer"}],
+    }
     assert validate_spec(spec) == []
 
 
@@ -556,6 +1578,91 @@ def test_validate_loop_with_loop_variables_ok():
     assert validate_spec(spec) == []
 
 
+def test_validate_undeclared_env_var_rejected():
+    """value_selector ['env','MISSING'] where MISSING not in environment_variables."""
+    spec = {
+        "mode": "workflow", "name": "T", "dsl_version": "0.5.0",
+        "environment_variables": [{"name": "API_KEY", "value": "v", "value_type": "string"}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "key", "value_selector": ["env", "MISSING"]}],  # not declared
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "out", "value_selector": ["code", "r"]}]},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "end"}],
+    }
+    errors = validate_spec(spec)
+    assert any("env variable 'MISSING'" in e and "not declared" in e for e in errors)
+
+
+def test_validate_declared_env_var_ok():
+    """value_selector ['env','API_KEY'] where API_KEY is declared."""
+    spec = {
+        "mode": "workflow", "name": "T", "dsl_version": "0.5.0",
+        "environment_variables": [{"name": "API_KEY", "value": "v", "value_type": "string"}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "key", "value_selector": ["env", "API_KEY"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "out", "value_selector": ["code", "r"]}]},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "end"}],
+    }
+    assert validate_spec(spec) == []
+
+
+def test_validate_invalid_sys_var_rejected():
+    """value_selector ['sys','bogus'] where bogus is not a valid system variable."""
+    spec = _spec([
+        {"id": "start", "type": "start", "title": "S"},
+        {"id": "code", "type": "code", "title": "C",
+         "variables": [{"variable": "q", "value_selector": ["sys", "bogus"]}],  # invalid
+         "outputs": {"r": {"type": "string"}}},
+        {"id": "end", "type": "end", "title": "E", "outputs": []},
+    ])
+    errors = validate_spec(spec)
+    assert any("invalid sys variable 'bogus'" in e for e in errors)
+
+
+def test_validate_undeclared_conversation_var_rejected():
+    """value_selector ['conversation','MISSING'] where MISSING not in conversation_variables."""
+    spec = {
+        "mode": "advanced-chat", "name": "T", "dsl_version": "0.5.0",
+        "conversation_variables": [{"name": "memory", "value_type": "string", "description": ""}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "m", "value_selector": ["conversation", "MISSING"]}],  # not declared
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "answer", "type": "answer", "title": "A", "implementation_hint": "reply"},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "answer"}],
+    }
+    errors = validate_spec(spec)
+    assert any("conversation variable 'MISSING'" in e and "not declared" in e for e in errors)
+
+
+def test_validate_declared_conversation_var_ok():
+    """value_selector ['conversation','memory'] where memory is declared."""
+    spec = {
+        "mode": "advanced-chat", "name": "T", "dsl_version": "0.5.0",
+        "conversation_variables": [{"name": "memory", "value_type": "string", "description": ""}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "m", "value_selector": ["conversation", "memory"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "answer", "type": "answer", "title": "A", "implementation_hint": "reply"},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "answer"}],
+    }
+    assert validate_spec(spec) == []
+
+
 def test_validate_single_element_selector_rejected():
     """value_selector ['sys.env.XXX'] is wrong - should be ['env','XXX']."""
     spec = _spec([
@@ -601,6 +1708,91 @@ def test_validate_correct_env_selector_ok():
             {"source": "code", "target": "end"},
         ],
     )
+    assert validate_spec(spec) == []
+
+
+def test_validate_undeclared_env_var_rejected():
+    """value_selector ['env','MISSING'] where MISSING not in environment_variables."""
+    spec = {
+        "mode": "workflow", "name": "T", "dsl_version": "0.5.0",
+        "environment_variables": [{"name": "API_KEY", "value": "v", "value_type": "string"}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "key", "value_selector": ["env", "MISSING"]}],  # not declared
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "out", "value_selector": ["code", "r"]}]},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "end"}],
+    }
+    errors = validate_spec(spec)
+    assert any("env variable 'MISSING'" in e and "not declared" in e for e in errors)
+
+
+def test_validate_declared_env_var_ok():
+    """value_selector ['env','API_KEY'] where API_KEY is declared."""
+    spec = {
+        "mode": "workflow", "name": "T", "dsl_version": "0.5.0",
+        "environment_variables": [{"name": "API_KEY", "value": "v", "value_type": "string"}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "key", "value_selector": ["env", "API_KEY"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "out", "value_selector": ["code", "r"]}]},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "end"}],
+    }
+    assert validate_spec(spec) == []
+
+
+def test_validate_invalid_sys_var_rejected():
+    """value_selector ['sys','bogus'] where bogus is not a valid system variable."""
+    spec = _spec([
+        {"id": "start", "type": "start", "title": "S"},
+        {"id": "code", "type": "code", "title": "C",
+         "variables": [{"variable": "q", "value_selector": ["sys", "bogus"]}],  # invalid
+         "outputs": {"r": {"type": "string"}}},
+        {"id": "end", "type": "end", "title": "E", "outputs": []},
+    ])
+    errors = validate_spec(spec)
+    assert any("invalid sys variable 'bogus'" in e for e in errors)
+
+
+def test_validate_undeclared_conversation_var_rejected():
+    """value_selector ['conversation','MISSING'] where MISSING not in conversation_variables."""
+    spec = {
+        "mode": "advanced-chat", "name": "T", "dsl_version": "0.5.0",
+        "conversation_variables": [{"name": "memory", "value_type": "string", "description": ""}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "m", "value_selector": ["conversation", "MISSING"]}],  # not declared
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "answer", "type": "answer", "title": "A", "implementation_hint": "reply"},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "answer"}],
+    }
+    errors = validate_spec(spec)
+    assert any("conversation variable 'MISSING'" in e and "not declared" in e for e in errors)
+
+
+def test_validate_declared_conversation_var_ok():
+    """value_selector ['conversation','memory'] where memory is declared."""
+    spec = {
+        "mode": "advanced-chat", "name": "T", "dsl_version": "0.5.0",
+        "conversation_variables": [{"name": "memory", "value_type": "string", "description": ""}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "m", "value_selector": ["conversation", "memory"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "answer", "type": "answer", "title": "A", "implementation_hint": "reply"},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "answer"}],
+    }
     assert validate_spec(spec) == []
 
 
@@ -652,6 +1844,91 @@ def test_validate_edge_coverage_ok():
     assert validate_spec(spec) == []
 
 
+def test_validate_undeclared_env_var_rejected():
+    """value_selector ['env','MISSING'] where MISSING not in environment_variables."""
+    spec = {
+        "mode": "workflow", "name": "T", "dsl_version": "0.5.0",
+        "environment_variables": [{"name": "API_KEY", "value": "v", "value_type": "string"}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "key", "value_selector": ["env", "MISSING"]}],  # not declared
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "out", "value_selector": ["code", "r"]}]},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "end"}],
+    }
+    errors = validate_spec(spec)
+    assert any("env variable 'MISSING'" in e and "not declared" in e for e in errors)
+
+
+def test_validate_declared_env_var_ok():
+    """value_selector ['env','API_KEY'] where API_KEY is declared."""
+    spec = {
+        "mode": "workflow", "name": "T", "dsl_version": "0.5.0",
+        "environment_variables": [{"name": "API_KEY", "value": "v", "value_type": "string"}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "key", "value_selector": ["env", "API_KEY"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "out", "value_selector": ["code", "r"]}]},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "end"}],
+    }
+    assert validate_spec(spec) == []
+
+
+def test_validate_invalid_sys_var_rejected():
+    """value_selector ['sys','bogus'] where bogus is not a valid system variable."""
+    spec = _spec([
+        {"id": "start", "type": "start", "title": "S"},
+        {"id": "code", "type": "code", "title": "C",
+         "variables": [{"variable": "q", "value_selector": ["sys", "bogus"]}],  # invalid
+         "outputs": {"r": {"type": "string"}}},
+        {"id": "end", "type": "end", "title": "E", "outputs": []},
+    ])
+    errors = validate_spec(spec)
+    assert any("invalid sys variable 'bogus'" in e for e in errors)
+
+
+def test_validate_undeclared_conversation_var_rejected():
+    """value_selector ['conversation','MISSING'] where MISSING not in conversation_variables."""
+    spec = {
+        "mode": "advanced-chat", "name": "T", "dsl_version": "0.5.0",
+        "conversation_variables": [{"name": "memory", "value_type": "string", "description": ""}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "m", "value_selector": ["conversation", "MISSING"]}],  # not declared
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "answer", "type": "answer", "title": "A", "implementation_hint": "reply"},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "answer"}],
+    }
+    errors = validate_spec(spec)
+    assert any("conversation variable 'MISSING'" in e and "not declared" in e for e in errors)
+
+
+def test_validate_declared_conversation_var_ok():
+    """value_selector ['conversation','memory'] where memory is declared."""
+    spec = {
+        "mode": "advanced-chat", "name": "T", "dsl_version": "0.5.0",
+        "conversation_variables": [{"name": "memory", "value_type": "string", "description": ""}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "m", "value_selector": ["conversation", "memory"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "answer", "type": "answer", "title": "A", "implementation_hint": "reply"},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "answer"}],
+    }
+    assert validate_spec(spec) == []
+
+
 def test_validate_single_element_selector_rejected():
     """value_selector ['sys.env.XXX'] is wrong - should be ['env','XXX']."""
     spec = _spec([
@@ -697,6 +1974,91 @@ def test_validate_correct_env_selector_ok():
             {"source": "code", "target": "end"},
         ],
     )
+    assert validate_spec(spec) == []
+
+
+def test_validate_undeclared_env_var_rejected():
+    """value_selector ['env','MISSING'] where MISSING not in environment_variables."""
+    spec = {
+        "mode": "workflow", "name": "T", "dsl_version": "0.5.0",
+        "environment_variables": [{"name": "API_KEY", "value": "v", "value_type": "string"}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "key", "value_selector": ["env", "MISSING"]}],  # not declared
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "out", "value_selector": ["code", "r"]}]},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "end"}],
+    }
+    errors = validate_spec(spec)
+    assert any("env variable 'MISSING'" in e and "not declared" in e for e in errors)
+
+
+def test_validate_declared_env_var_ok():
+    """value_selector ['env','API_KEY'] where API_KEY is declared."""
+    spec = {
+        "mode": "workflow", "name": "T", "dsl_version": "0.5.0",
+        "environment_variables": [{"name": "API_KEY", "value": "v", "value_type": "string"}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "key", "value_selector": ["env", "API_KEY"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "out", "value_selector": ["code", "r"]}]},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "end"}],
+    }
+    assert validate_spec(spec) == []
+
+
+def test_validate_invalid_sys_var_rejected():
+    """value_selector ['sys','bogus'] where bogus is not a valid system variable."""
+    spec = _spec([
+        {"id": "start", "type": "start", "title": "S"},
+        {"id": "code", "type": "code", "title": "C",
+         "variables": [{"variable": "q", "value_selector": ["sys", "bogus"]}],  # invalid
+         "outputs": {"r": {"type": "string"}}},
+        {"id": "end", "type": "end", "title": "E", "outputs": []},
+    ])
+    errors = validate_spec(spec)
+    assert any("invalid sys variable 'bogus'" in e for e in errors)
+
+
+def test_validate_undeclared_conversation_var_rejected():
+    """value_selector ['conversation','MISSING'] where MISSING not in conversation_variables."""
+    spec = {
+        "mode": "advanced-chat", "name": "T", "dsl_version": "0.5.0",
+        "conversation_variables": [{"name": "memory", "value_type": "string", "description": ""}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "m", "value_selector": ["conversation", "MISSING"]}],  # not declared
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "answer", "type": "answer", "title": "A", "implementation_hint": "reply"},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "answer"}],
+    }
+    errors = validate_spec(spec)
+    assert any("conversation variable 'MISSING'" in e and "not declared" in e for e in errors)
+
+
+def test_validate_declared_conversation_var_ok():
+    """value_selector ['conversation','memory'] where memory is declared."""
+    spec = {
+        "mode": "advanced-chat", "name": "T", "dsl_version": "0.5.0",
+        "conversation_variables": [{"name": "memory", "value_type": "string", "description": ""}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "m", "value_selector": ["conversation", "memory"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "answer", "type": "answer", "title": "A", "implementation_hint": "reply"},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "answer"}],
+    }
     assert validate_spec(spec) == []
 
 
@@ -721,6 +2083,91 @@ def test_validate_edge_coverage_transitive_ok():
     assert validate_spec(spec) == []
 
 
+def test_validate_undeclared_env_var_rejected():
+    """value_selector ['env','MISSING'] where MISSING not in environment_variables."""
+    spec = {
+        "mode": "workflow", "name": "T", "dsl_version": "0.5.0",
+        "environment_variables": [{"name": "API_KEY", "value": "v", "value_type": "string"}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "key", "value_selector": ["env", "MISSING"]}],  # not declared
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "out", "value_selector": ["code", "r"]}]},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "end"}],
+    }
+    errors = validate_spec(spec)
+    assert any("env variable 'MISSING'" in e and "not declared" in e for e in errors)
+
+
+def test_validate_declared_env_var_ok():
+    """value_selector ['env','API_KEY'] where API_KEY is declared."""
+    spec = {
+        "mode": "workflow", "name": "T", "dsl_version": "0.5.0",
+        "environment_variables": [{"name": "API_KEY", "value": "v", "value_type": "string"}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "key", "value_selector": ["env", "API_KEY"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "out", "value_selector": ["code", "r"]}]},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "end"}],
+    }
+    assert validate_spec(spec) == []
+
+
+def test_validate_invalid_sys_var_rejected():
+    """value_selector ['sys','bogus'] where bogus is not a valid system variable."""
+    spec = _spec([
+        {"id": "start", "type": "start", "title": "S"},
+        {"id": "code", "type": "code", "title": "C",
+         "variables": [{"variable": "q", "value_selector": ["sys", "bogus"]}],  # invalid
+         "outputs": {"r": {"type": "string"}}},
+        {"id": "end", "type": "end", "title": "E", "outputs": []},
+    ])
+    errors = validate_spec(spec)
+    assert any("invalid sys variable 'bogus'" in e for e in errors)
+
+
+def test_validate_undeclared_conversation_var_rejected():
+    """value_selector ['conversation','MISSING'] where MISSING not in conversation_variables."""
+    spec = {
+        "mode": "advanced-chat", "name": "T", "dsl_version": "0.5.0",
+        "conversation_variables": [{"name": "memory", "value_type": "string", "description": ""}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "m", "value_selector": ["conversation", "MISSING"]}],  # not declared
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "answer", "type": "answer", "title": "A", "implementation_hint": "reply"},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "answer"}],
+    }
+    errors = validate_spec(spec)
+    assert any("conversation variable 'MISSING'" in e and "not declared" in e for e in errors)
+
+
+def test_validate_declared_conversation_var_ok():
+    """value_selector ['conversation','memory'] where memory is declared."""
+    spec = {
+        "mode": "advanced-chat", "name": "T", "dsl_version": "0.5.0",
+        "conversation_variables": [{"name": "memory", "value_type": "string", "description": ""}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "m", "value_selector": ["conversation", "memory"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "answer", "type": "answer", "title": "A", "implementation_hint": "reply"},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "answer"}],
+    }
+    assert validate_spec(spec) == []
+
+
 def test_validate_single_element_selector_rejected():
     """value_selector ['sys.env.XXX'] is wrong - should be ['env','XXX']."""
     spec = _spec([
@@ -766,6 +2213,91 @@ def test_validate_correct_env_selector_ok():
             {"source": "code", "target": "end"},
         ],
     )
+    assert validate_spec(spec) == []
+
+
+def test_validate_undeclared_env_var_rejected():
+    """value_selector ['env','MISSING'] where MISSING not in environment_variables."""
+    spec = {
+        "mode": "workflow", "name": "T", "dsl_version": "0.5.0",
+        "environment_variables": [{"name": "API_KEY", "value": "v", "value_type": "string"}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "key", "value_selector": ["env", "MISSING"]}],  # not declared
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "out", "value_selector": ["code", "r"]}]},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "end"}],
+    }
+    errors = validate_spec(spec)
+    assert any("env variable 'MISSING'" in e and "not declared" in e for e in errors)
+
+
+def test_validate_declared_env_var_ok():
+    """value_selector ['env','API_KEY'] where API_KEY is declared."""
+    spec = {
+        "mode": "workflow", "name": "T", "dsl_version": "0.5.0",
+        "environment_variables": [{"name": "API_KEY", "value": "v", "value_type": "string"}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "key", "value_selector": ["env", "API_KEY"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "out", "value_selector": ["code", "r"]}]},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "end"}],
+    }
+    assert validate_spec(spec) == []
+
+
+def test_validate_invalid_sys_var_rejected():
+    """value_selector ['sys','bogus'] where bogus is not a valid system variable."""
+    spec = _spec([
+        {"id": "start", "type": "start", "title": "S"},
+        {"id": "code", "type": "code", "title": "C",
+         "variables": [{"variable": "q", "value_selector": ["sys", "bogus"]}],  # invalid
+         "outputs": {"r": {"type": "string"}}},
+        {"id": "end", "type": "end", "title": "E", "outputs": []},
+    ])
+    errors = validate_spec(spec)
+    assert any("invalid sys variable 'bogus'" in e for e in errors)
+
+
+def test_validate_undeclared_conversation_var_rejected():
+    """value_selector ['conversation','MISSING'] where MISSING not in conversation_variables."""
+    spec = {
+        "mode": "advanced-chat", "name": "T", "dsl_version": "0.5.0",
+        "conversation_variables": [{"name": "memory", "value_type": "string", "description": ""}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "m", "value_selector": ["conversation", "MISSING"]}],  # not declared
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "answer", "type": "answer", "title": "A", "implementation_hint": "reply"},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "answer"}],
+    }
+    errors = validate_spec(spec)
+    assert any("conversation variable 'MISSING'" in e and "not declared" in e for e in errors)
+
+
+def test_validate_declared_conversation_var_ok():
+    """value_selector ['conversation','memory'] where memory is declared."""
+    spec = {
+        "mode": "advanced-chat", "name": "T", "dsl_version": "0.5.0",
+        "conversation_variables": [{"name": "memory", "value_type": "string", "description": ""}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "m", "value_selector": ["conversation", "memory"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "answer", "type": "answer", "title": "A", "implementation_hint": "reply"},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "answer"}],
+    }
     assert validate_spec(spec) == []
 
 
@@ -884,6 +2416,91 @@ def test_validate_correct_container_edges_ok():
     assert validate_spec(spec) == []
 
 
+def test_validate_undeclared_env_var_rejected():
+    """value_selector ['env','MISSING'] where MISSING not in environment_variables."""
+    spec = {
+        "mode": "workflow", "name": "T", "dsl_version": "0.5.0",
+        "environment_variables": [{"name": "API_KEY", "value": "v", "value_type": "string"}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "key", "value_selector": ["env", "MISSING"]}],  # not declared
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "out", "value_selector": ["code", "r"]}]},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "end"}],
+    }
+    errors = validate_spec(spec)
+    assert any("env variable 'MISSING'" in e and "not declared" in e for e in errors)
+
+
+def test_validate_declared_env_var_ok():
+    """value_selector ['env','API_KEY'] where API_KEY is declared."""
+    spec = {
+        "mode": "workflow", "name": "T", "dsl_version": "0.5.0",
+        "environment_variables": [{"name": "API_KEY", "value": "v", "value_type": "string"}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "key", "value_selector": ["env", "API_KEY"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "out", "value_selector": ["code", "r"]}]},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "end"}],
+    }
+    assert validate_spec(spec) == []
+
+
+def test_validate_invalid_sys_var_rejected():
+    """value_selector ['sys','bogus'] where bogus is not a valid system variable."""
+    spec = _spec([
+        {"id": "start", "type": "start", "title": "S"},
+        {"id": "code", "type": "code", "title": "C",
+         "variables": [{"variable": "q", "value_selector": ["sys", "bogus"]}],  # invalid
+         "outputs": {"r": {"type": "string"}}},
+        {"id": "end", "type": "end", "title": "E", "outputs": []},
+    ])
+    errors = validate_spec(spec)
+    assert any("invalid sys variable 'bogus'" in e for e in errors)
+
+
+def test_validate_undeclared_conversation_var_rejected():
+    """value_selector ['conversation','MISSING'] where MISSING not in conversation_variables."""
+    spec = {
+        "mode": "advanced-chat", "name": "T", "dsl_version": "0.5.0",
+        "conversation_variables": [{"name": "memory", "value_type": "string", "description": ""}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "m", "value_selector": ["conversation", "MISSING"]}],  # not declared
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "answer", "type": "answer", "title": "A", "implementation_hint": "reply"},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "answer"}],
+    }
+    errors = validate_spec(spec)
+    assert any("conversation variable 'MISSING'" in e and "not declared" in e for e in errors)
+
+
+def test_validate_declared_conversation_var_ok():
+    """value_selector ['conversation','memory'] where memory is declared."""
+    spec = {
+        "mode": "advanced-chat", "name": "T", "dsl_version": "0.5.0",
+        "conversation_variables": [{"name": "memory", "value_type": "string", "description": ""}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "m", "value_selector": ["conversation", "memory"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "answer", "type": "answer", "title": "A", "implementation_hint": "reply"},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "answer"}],
+    }
+    assert validate_spec(spec) == []
+
+
 def test_validate_single_element_selector_rejected():
     """value_selector ['sys.env.XXX'] is wrong - should be ['env','XXX']."""
     spec = _spec([
@@ -929,6 +2546,91 @@ def test_validate_correct_env_selector_ok():
             {"source": "code", "target": "end"},
         ],
     )
+    assert validate_spec(spec) == []
+
+
+def test_validate_undeclared_env_var_rejected():
+    """value_selector ['env','MISSING'] where MISSING not in environment_variables."""
+    spec = {
+        "mode": "workflow", "name": "T", "dsl_version": "0.5.0",
+        "environment_variables": [{"name": "API_KEY", "value": "v", "value_type": "string"}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "key", "value_selector": ["env", "MISSING"]}],  # not declared
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "out", "value_selector": ["code", "r"]}]},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "end"}],
+    }
+    errors = validate_spec(spec)
+    assert any("env variable 'MISSING'" in e and "not declared" in e for e in errors)
+
+
+def test_validate_declared_env_var_ok():
+    """value_selector ['env','API_KEY'] where API_KEY is declared."""
+    spec = {
+        "mode": "workflow", "name": "T", "dsl_version": "0.5.0",
+        "environment_variables": [{"name": "API_KEY", "value": "v", "value_type": "string"}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "key", "value_selector": ["env", "API_KEY"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "out", "value_selector": ["code", "r"]}]},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "end"}],
+    }
+    assert validate_spec(spec) == []
+
+
+def test_validate_invalid_sys_var_rejected():
+    """value_selector ['sys','bogus'] where bogus is not a valid system variable."""
+    spec = _spec([
+        {"id": "start", "type": "start", "title": "S"},
+        {"id": "code", "type": "code", "title": "C",
+         "variables": [{"variable": "q", "value_selector": ["sys", "bogus"]}],  # invalid
+         "outputs": {"r": {"type": "string"}}},
+        {"id": "end", "type": "end", "title": "E", "outputs": []},
+    ])
+    errors = validate_spec(spec)
+    assert any("invalid sys variable 'bogus'" in e for e in errors)
+
+
+def test_validate_undeclared_conversation_var_rejected():
+    """value_selector ['conversation','MISSING'] where MISSING not in conversation_variables."""
+    spec = {
+        "mode": "advanced-chat", "name": "T", "dsl_version": "0.5.0",
+        "conversation_variables": [{"name": "memory", "value_type": "string", "description": ""}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "m", "value_selector": ["conversation", "MISSING"]}],  # not declared
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "answer", "type": "answer", "title": "A", "implementation_hint": "reply"},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "answer"}],
+    }
+    errors = validate_spec(spec)
+    assert any("conversation variable 'MISSING'" in e and "not declared" in e for e in errors)
+
+
+def test_validate_declared_conversation_var_ok():
+    """value_selector ['conversation','memory'] where memory is declared."""
+    spec = {
+        "mode": "advanced-chat", "name": "T", "dsl_version": "0.5.0",
+        "conversation_variables": [{"name": "memory", "value_type": "string", "description": ""}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "m", "value_selector": ["conversation", "memory"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "answer", "type": "answer", "title": "A", "implementation_hint": "reply"},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "answer"}],
+    }
     assert validate_spec(spec) == []
 
 
@@ -980,6 +2682,91 @@ def test_validate_edge_coverage_ok():
     assert validate_spec(spec) == []
 
 
+def test_validate_undeclared_env_var_rejected():
+    """value_selector ['env','MISSING'] where MISSING not in environment_variables."""
+    spec = {
+        "mode": "workflow", "name": "T", "dsl_version": "0.5.0",
+        "environment_variables": [{"name": "API_KEY", "value": "v", "value_type": "string"}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "key", "value_selector": ["env", "MISSING"]}],  # not declared
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "out", "value_selector": ["code", "r"]}]},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "end"}],
+    }
+    errors = validate_spec(spec)
+    assert any("env variable 'MISSING'" in e and "not declared" in e for e in errors)
+
+
+def test_validate_declared_env_var_ok():
+    """value_selector ['env','API_KEY'] where API_KEY is declared."""
+    spec = {
+        "mode": "workflow", "name": "T", "dsl_version": "0.5.0",
+        "environment_variables": [{"name": "API_KEY", "value": "v", "value_type": "string"}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "key", "value_selector": ["env", "API_KEY"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "out", "value_selector": ["code", "r"]}]},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "end"}],
+    }
+    assert validate_spec(spec) == []
+
+
+def test_validate_invalid_sys_var_rejected():
+    """value_selector ['sys','bogus'] where bogus is not a valid system variable."""
+    spec = _spec([
+        {"id": "start", "type": "start", "title": "S"},
+        {"id": "code", "type": "code", "title": "C",
+         "variables": [{"variable": "q", "value_selector": ["sys", "bogus"]}],  # invalid
+         "outputs": {"r": {"type": "string"}}},
+        {"id": "end", "type": "end", "title": "E", "outputs": []},
+    ])
+    errors = validate_spec(spec)
+    assert any("invalid sys variable 'bogus'" in e for e in errors)
+
+
+def test_validate_undeclared_conversation_var_rejected():
+    """value_selector ['conversation','MISSING'] where MISSING not in conversation_variables."""
+    spec = {
+        "mode": "advanced-chat", "name": "T", "dsl_version": "0.5.0",
+        "conversation_variables": [{"name": "memory", "value_type": "string", "description": ""}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "m", "value_selector": ["conversation", "MISSING"]}],  # not declared
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "answer", "type": "answer", "title": "A", "implementation_hint": "reply"},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "answer"}],
+    }
+    errors = validate_spec(spec)
+    assert any("conversation variable 'MISSING'" in e and "not declared" in e for e in errors)
+
+
+def test_validate_declared_conversation_var_ok():
+    """value_selector ['conversation','memory'] where memory is declared."""
+    spec = {
+        "mode": "advanced-chat", "name": "T", "dsl_version": "0.5.0",
+        "conversation_variables": [{"name": "memory", "value_type": "string", "description": ""}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "m", "value_selector": ["conversation", "memory"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "answer", "type": "answer", "title": "A", "implementation_hint": "reply"},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "answer"}],
+    }
+    assert validate_spec(spec) == []
+
+
 def test_validate_single_element_selector_rejected():
     """value_selector ['sys.env.XXX'] is wrong - should be ['env','XXX']."""
     spec = _spec([
@@ -1025,6 +2812,91 @@ def test_validate_correct_env_selector_ok():
             {"source": "code", "target": "end"},
         ],
     )
+    assert validate_spec(spec) == []
+
+
+def test_validate_undeclared_env_var_rejected():
+    """value_selector ['env','MISSING'] where MISSING not in environment_variables."""
+    spec = {
+        "mode": "workflow", "name": "T", "dsl_version": "0.5.0",
+        "environment_variables": [{"name": "API_KEY", "value": "v", "value_type": "string"}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "key", "value_selector": ["env", "MISSING"]}],  # not declared
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "out", "value_selector": ["code", "r"]}]},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "end"}],
+    }
+    errors = validate_spec(spec)
+    assert any("env variable 'MISSING'" in e and "not declared" in e for e in errors)
+
+
+def test_validate_declared_env_var_ok():
+    """value_selector ['env','API_KEY'] where API_KEY is declared."""
+    spec = {
+        "mode": "workflow", "name": "T", "dsl_version": "0.5.0",
+        "environment_variables": [{"name": "API_KEY", "value": "v", "value_type": "string"}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "key", "value_selector": ["env", "API_KEY"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "out", "value_selector": ["code", "r"]}]},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "end"}],
+    }
+    assert validate_spec(spec) == []
+
+
+def test_validate_invalid_sys_var_rejected():
+    """value_selector ['sys','bogus'] where bogus is not a valid system variable."""
+    spec = _spec([
+        {"id": "start", "type": "start", "title": "S"},
+        {"id": "code", "type": "code", "title": "C",
+         "variables": [{"variable": "q", "value_selector": ["sys", "bogus"]}],  # invalid
+         "outputs": {"r": {"type": "string"}}},
+        {"id": "end", "type": "end", "title": "E", "outputs": []},
+    ])
+    errors = validate_spec(spec)
+    assert any("invalid sys variable 'bogus'" in e for e in errors)
+
+
+def test_validate_undeclared_conversation_var_rejected():
+    """value_selector ['conversation','MISSING'] where MISSING not in conversation_variables."""
+    spec = {
+        "mode": "advanced-chat", "name": "T", "dsl_version": "0.5.0",
+        "conversation_variables": [{"name": "memory", "value_type": "string", "description": ""}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "m", "value_selector": ["conversation", "MISSING"]}],  # not declared
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "answer", "type": "answer", "title": "A", "implementation_hint": "reply"},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "answer"}],
+    }
+    errors = validate_spec(spec)
+    assert any("conversation variable 'MISSING'" in e and "not declared" in e for e in errors)
+
+
+def test_validate_declared_conversation_var_ok():
+    """value_selector ['conversation','memory'] where memory is declared."""
+    spec = {
+        "mode": "advanced-chat", "name": "T", "dsl_version": "0.5.0",
+        "conversation_variables": [{"name": "memory", "value_type": "string", "description": ""}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "m", "value_selector": ["conversation", "memory"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "answer", "type": "answer", "title": "A", "implementation_hint": "reply"},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "answer"}],
+    }
     assert validate_spec(spec) == []
 
 
@@ -1049,6 +2921,91 @@ def test_validate_edge_coverage_transitive_ok():
     assert validate_spec(spec) == []
 
 
+def test_validate_undeclared_env_var_rejected():
+    """value_selector ['env','MISSING'] where MISSING not in environment_variables."""
+    spec = {
+        "mode": "workflow", "name": "T", "dsl_version": "0.5.0",
+        "environment_variables": [{"name": "API_KEY", "value": "v", "value_type": "string"}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "key", "value_selector": ["env", "MISSING"]}],  # not declared
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "out", "value_selector": ["code", "r"]}]},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "end"}],
+    }
+    errors = validate_spec(spec)
+    assert any("env variable 'MISSING'" in e and "not declared" in e for e in errors)
+
+
+def test_validate_declared_env_var_ok():
+    """value_selector ['env','API_KEY'] where API_KEY is declared."""
+    spec = {
+        "mode": "workflow", "name": "T", "dsl_version": "0.5.0",
+        "environment_variables": [{"name": "API_KEY", "value": "v", "value_type": "string"}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "key", "value_selector": ["env", "API_KEY"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "out", "value_selector": ["code", "r"]}]},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "end"}],
+    }
+    assert validate_spec(spec) == []
+
+
+def test_validate_invalid_sys_var_rejected():
+    """value_selector ['sys','bogus'] where bogus is not a valid system variable."""
+    spec = _spec([
+        {"id": "start", "type": "start", "title": "S"},
+        {"id": "code", "type": "code", "title": "C",
+         "variables": [{"variable": "q", "value_selector": ["sys", "bogus"]}],  # invalid
+         "outputs": {"r": {"type": "string"}}},
+        {"id": "end", "type": "end", "title": "E", "outputs": []},
+    ])
+    errors = validate_spec(spec)
+    assert any("invalid sys variable 'bogus'" in e for e in errors)
+
+
+def test_validate_undeclared_conversation_var_rejected():
+    """value_selector ['conversation','MISSING'] where MISSING not in conversation_variables."""
+    spec = {
+        "mode": "advanced-chat", "name": "T", "dsl_version": "0.5.0",
+        "conversation_variables": [{"name": "memory", "value_type": "string", "description": ""}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "m", "value_selector": ["conversation", "MISSING"]}],  # not declared
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "answer", "type": "answer", "title": "A", "implementation_hint": "reply"},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "answer"}],
+    }
+    errors = validate_spec(spec)
+    assert any("conversation variable 'MISSING'" in e and "not declared" in e for e in errors)
+
+
+def test_validate_declared_conversation_var_ok():
+    """value_selector ['conversation','memory'] where memory is declared."""
+    spec = {
+        "mode": "advanced-chat", "name": "T", "dsl_version": "0.5.0",
+        "conversation_variables": [{"name": "memory", "value_type": "string", "description": ""}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "m", "value_selector": ["conversation", "memory"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "answer", "type": "answer", "title": "A", "implementation_hint": "reply"},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "answer"}],
+    }
+    assert validate_spec(spec) == []
+
+
 def test_validate_single_element_selector_rejected():
     """value_selector ['sys.env.XXX'] is wrong - should be ['env','XXX']."""
     spec = _spec([
@@ -1094,6 +3051,91 @@ def test_validate_correct_env_selector_ok():
             {"source": "code", "target": "end"},
         ],
     )
+    assert validate_spec(spec) == []
+
+
+def test_validate_undeclared_env_var_rejected():
+    """value_selector ['env','MISSING'] where MISSING not in environment_variables."""
+    spec = {
+        "mode": "workflow", "name": "T", "dsl_version": "0.5.0",
+        "environment_variables": [{"name": "API_KEY", "value": "v", "value_type": "string"}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "key", "value_selector": ["env", "MISSING"]}],  # not declared
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "out", "value_selector": ["code", "r"]}]},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "end"}],
+    }
+    errors = validate_spec(spec)
+    assert any("env variable 'MISSING'" in e and "not declared" in e for e in errors)
+
+
+def test_validate_declared_env_var_ok():
+    """value_selector ['env','API_KEY'] where API_KEY is declared."""
+    spec = {
+        "mode": "workflow", "name": "T", "dsl_version": "0.5.0",
+        "environment_variables": [{"name": "API_KEY", "value": "v", "value_type": "string"}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "key", "value_selector": ["env", "API_KEY"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "out", "value_selector": ["code", "r"]}]},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "end"}],
+    }
+    assert validate_spec(spec) == []
+
+
+def test_validate_invalid_sys_var_rejected():
+    """value_selector ['sys','bogus'] where bogus is not a valid system variable."""
+    spec = _spec([
+        {"id": "start", "type": "start", "title": "S"},
+        {"id": "code", "type": "code", "title": "C",
+         "variables": [{"variable": "q", "value_selector": ["sys", "bogus"]}],  # invalid
+         "outputs": {"r": {"type": "string"}}},
+        {"id": "end", "type": "end", "title": "E", "outputs": []},
+    ])
+    errors = validate_spec(spec)
+    assert any("invalid sys variable 'bogus'" in e for e in errors)
+
+
+def test_validate_undeclared_conversation_var_rejected():
+    """value_selector ['conversation','MISSING'] where MISSING not in conversation_variables."""
+    spec = {
+        "mode": "advanced-chat", "name": "T", "dsl_version": "0.5.0",
+        "conversation_variables": [{"name": "memory", "value_type": "string", "description": ""}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "m", "value_selector": ["conversation", "MISSING"]}],  # not declared
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "answer", "type": "answer", "title": "A", "implementation_hint": "reply"},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "answer"}],
+    }
+    errors = validate_spec(spec)
+    assert any("conversation variable 'MISSING'" in e and "not declared" in e for e in errors)
+
+
+def test_validate_declared_conversation_var_ok():
+    """value_selector ['conversation','memory'] where memory is declared."""
+    spec = {
+        "mode": "advanced-chat", "name": "T", "dsl_version": "0.5.0",
+        "conversation_variables": [{"name": "memory", "value_type": "string", "description": ""}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "m", "value_selector": ["conversation", "memory"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "answer", "type": "answer", "title": "A", "implementation_hint": "reply"},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "answer"}],
+    }
     assert validate_spec(spec) == []
 
 
@@ -1152,6 +3194,91 @@ def test_validate_answer_in_advanced_chat_ok():
     assert validate_spec(spec) == []
 
 
+def test_validate_undeclared_env_var_rejected():
+    """value_selector ['env','MISSING'] where MISSING not in environment_variables."""
+    spec = {
+        "mode": "workflow", "name": "T", "dsl_version": "0.5.0",
+        "environment_variables": [{"name": "API_KEY", "value": "v", "value_type": "string"}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "key", "value_selector": ["env", "MISSING"]}],  # not declared
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "out", "value_selector": ["code", "r"]}]},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "end"}],
+    }
+    errors = validate_spec(spec)
+    assert any("env variable 'MISSING'" in e and "not declared" in e for e in errors)
+
+
+def test_validate_declared_env_var_ok():
+    """value_selector ['env','API_KEY'] where API_KEY is declared."""
+    spec = {
+        "mode": "workflow", "name": "T", "dsl_version": "0.5.0",
+        "environment_variables": [{"name": "API_KEY", "value": "v", "value_type": "string"}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "key", "value_selector": ["env", "API_KEY"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "out", "value_selector": ["code", "r"]}]},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "end"}],
+    }
+    assert validate_spec(spec) == []
+
+
+def test_validate_invalid_sys_var_rejected():
+    """value_selector ['sys','bogus'] where bogus is not a valid system variable."""
+    spec = _spec([
+        {"id": "start", "type": "start", "title": "S"},
+        {"id": "code", "type": "code", "title": "C",
+         "variables": [{"variable": "q", "value_selector": ["sys", "bogus"]}],  # invalid
+         "outputs": {"r": {"type": "string"}}},
+        {"id": "end", "type": "end", "title": "E", "outputs": []},
+    ])
+    errors = validate_spec(spec)
+    assert any("invalid sys variable 'bogus'" in e for e in errors)
+
+
+def test_validate_undeclared_conversation_var_rejected():
+    """value_selector ['conversation','MISSING'] where MISSING not in conversation_variables."""
+    spec = {
+        "mode": "advanced-chat", "name": "T", "dsl_version": "0.5.0",
+        "conversation_variables": [{"name": "memory", "value_type": "string", "description": ""}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "m", "value_selector": ["conversation", "MISSING"]}],  # not declared
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "answer", "type": "answer", "title": "A", "implementation_hint": "reply"},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "answer"}],
+    }
+    errors = validate_spec(spec)
+    assert any("conversation variable 'MISSING'" in e and "not declared" in e for e in errors)
+
+
+def test_validate_declared_conversation_var_ok():
+    """value_selector ['conversation','memory'] where memory is declared."""
+    spec = {
+        "mode": "advanced-chat", "name": "T", "dsl_version": "0.5.0",
+        "conversation_variables": [{"name": "memory", "value_type": "string", "description": ""}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "m", "value_selector": ["conversation", "memory"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "answer", "type": "answer", "title": "A", "implementation_hint": "reply"},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "answer"}],
+    }
+    assert validate_spec(spec) == []
+
+
 def test_validate_single_element_selector_rejected():
     """value_selector ['sys.env.XXX'] is wrong - should be ['env','XXX']."""
     spec = _spec([
@@ -1197,6 +3324,91 @@ def test_validate_correct_env_selector_ok():
             {"source": "code", "target": "end"},
         ],
     )
+    assert validate_spec(spec) == []
+
+
+def test_validate_undeclared_env_var_rejected():
+    """value_selector ['env','MISSING'] where MISSING not in environment_variables."""
+    spec = {
+        "mode": "workflow", "name": "T", "dsl_version": "0.5.0",
+        "environment_variables": [{"name": "API_KEY", "value": "v", "value_type": "string"}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "key", "value_selector": ["env", "MISSING"]}],  # not declared
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "out", "value_selector": ["code", "r"]}]},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "end"}],
+    }
+    errors = validate_spec(spec)
+    assert any("env variable 'MISSING'" in e and "not declared" in e for e in errors)
+
+
+def test_validate_declared_env_var_ok():
+    """value_selector ['env','API_KEY'] where API_KEY is declared."""
+    spec = {
+        "mode": "workflow", "name": "T", "dsl_version": "0.5.0",
+        "environment_variables": [{"name": "API_KEY", "value": "v", "value_type": "string"}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "key", "value_selector": ["env", "API_KEY"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "out", "value_selector": ["code", "r"]}]},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "end"}],
+    }
+    assert validate_spec(spec) == []
+
+
+def test_validate_invalid_sys_var_rejected():
+    """value_selector ['sys','bogus'] where bogus is not a valid system variable."""
+    spec = _spec([
+        {"id": "start", "type": "start", "title": "S"},
+        {"id": "code", "type": "code", "title": "C",
+         "variables": [{"variable": "q", "value_selector": ["sys", "bogus"]}],  # invalid
+         "outputs": {"r": {"type": "string"}}},
+        {"id": "end", "type": "end", "title": "E", "outputs": []},
+    ])
+    errors = validate_spec(spec)
+    assert any("invalid sys variable 'bogus'" in e for e in errors)
+
+
+def test_validate_undeclared_conversation_var_rejected():
+    """value_selector ['conversation','MISSING'] where MISSING not in conversation_variables."""
+    spec = {
+        "mode": "advanced-chat", "name": "T", "dsl_version": "0.5.0",
+        "conversation_variables": [{"name": "memory", "value_type": "string", "description": ""}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "m", "value_selector": ["conversation", "MISSING"]}],  # not declared
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "answer", "type": "answer", "title": "A", "implementation_hint": "reply"},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "answer"}],
+    }
+    errors = validate_spec(spec)
+    assert any("conversation variable 'MISSING'" in e and "not declared" in e for e in errors)
+
+
+def test_validate_declared_conversation_var_ok():
+    """value_selector ['conversation','memory'] where memory is declared."""
+    spec = {
+        "mode": "advanced-chat", "name": "T", "dsl_version": "0.5.0",
+        "conversation_variables": [{"name": "memory", "value_type": "string", "description": ""}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "m", "value_selector": ["conversation", "memory"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "answer", "type": "answer", "title": "A", "implementation_hint": "reply"},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "answer"}],
+    }
     assert validate_spec(spec) == []
 
 
@@ -1248,6 +3460,91 @@ def test_validate_edge_coverage_ok():
     assert validate_spec(spec) == []
 
 
+def test_validate_undeclared_env_var_rejected():
+    """value_selector ['env','MISSING'] where MISSING not in environment_variables."""
+    spec = {
+        "mode": "workflow", "name": "T", "dsl_version": "0.5.0",
+        "environment_variables": [{"name": "API_KEY", "value": "v", "value_type": "string"}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "key", "value_selector": ["env", "MISSING"]}],  # not declared
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "out", "value_selector": ["code", "r"]}]},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "end"}],
+    }
+    errors = validate_spec(spec)
+    assert any("env variable 'MISSING'" in e and "not declared" in e for e in errors)
+
+
+def test_validate_declared_env_var_ok():
+    """value_selector ['env','API_KEY'] where API_KEY is declared."""
+    spec = {
+        "mode": "workflow", "name": "T", "dsl_version": "0.5.0",
+        "environment_variables": [{"name": "API_KEY", "value": "v", "value_type": "string"}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "key", "value_selector": ["env", "API_KEY"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "out", "value_selector": ["code", "r"]}]},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "end"}],
+    }
+    assert validate_spec(spec) == []
+
+
+def test_validate_invalid_sys_var_rejected():
+    """value_selector ['sys','bogus'] where bogus is not a valid system variable."""
+    spec = _spec([
+        {"id": "start", "type": "start", "title": "S"},
+        {"id": "code", "type": "code", "title": "C",
+         "variables": [{"variable": "q", "value_selector": ["sys", "bogus"]}],  # invalid
+         "outputs": {"r": {"type": "string"}}},
+        {"id": "end", "type": "end", "title": "E", "outputs": []},
+    ])
+    errors = validate_spec(spec)
+    assert any("invalid sys variable 'bogus'" in e for e in errors)
+
+
+def test_validate_undeclared_conversation_var_rejected():
+    """value_selector ['conversation','MISSING'] where MISSING not in conversation_variables."""
+    spec = {
+        "mode": "advanced-chat", "name": "T", "dsl_version": "0.5.0",
+        "conversation_variables": [{"name": "memory", "value_type": "string", "description": ""}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "m", "value_selector": ["conversation", "MISSING"]}],  # not declared
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "answer", "type": "answer", "title": "A", "implementation_hint": "reply"},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "answer"}],
+    }
+    errors = validate_spec(spec)
+    assert any("conversation variable 'MISSING'" in e and "not declared" in e for e in errors)
+
+
+def test_validate_declared_conversation_var_ok():
+    """value_selector ['conversation','memory'] where memory is declared."""
+    spec = {
+        "mode": "advanced-chat", "name": "T", "dsl_version": "0.5.0",
+        "conversation_variables": [{"name": "memory", "value_type": "string", "description": ""}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "m", "value_selector": ["conversation", "memory"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "answer", "type": "answer", "title": "A", "implementation_hint": "reply"},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "answer"}],
+    }
+    assert validate_spec(spec) == []
+
+
 def test_validate_single_element_selector_rejected():
     """value_selector ['sys.env.XXX'] is wrong - should be ['env','XXX']."""
     spec = _spec([
@@ -1293,6 +3590,91 @@ def test_validate_correct_env_selector_ok():
             {"source": "code", "target": "end"},
         ],
     )
+    assert validate_spec(spec) == []
+
+
+def test_validate_undeclared_env_var_rejected():
+    """value_selector ['env','MISSING'] where MISSING not in environment_variables."""
+    spec = {
+        "mode": "workflow", "name": "T", "dsl_version": "0.5.0",
+        "environment_variables": [{"name": "API_KEY", "value": "v", "value_type": "string"}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "key", "value_selector": ["env", "MISSING"]}],  # not declared
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "out", "value_selector": ["code", "r"]}]},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "end"}],
+    }
+    errors = validate_spec(spec)
+    assert any("env variable 'MISSING'" in e and "not declared" in e for e in errors)
+
+
+def test_validate_declared_env_var_ok():
+    """value_selector ['env','API_KEY'] where API_KEY is declared."""
+    spec = {
+        "mode": "workflow", "name": "T", "dsl_version": "0.5.0",
+        "environment_variables": [{"name": "API_KEY", "value": "v", "value_type": "string"}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "key", "value_selector": ["env", "API_KEY"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "out", "value_selector": ["code", "r"]}]},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "end"}],
+    }
+    assert validate_spec(spec) == []
+
+
+def test_validate_invalid_sys_var_rejected():
+    """value_selector ['sys','bogus'] where bogus is not a valid system variable."""
+    spec = _spec([
+        {"id": "start", "type": "start", "title": "S"},
+        {"id": "code", "type": "code", "title": "C",
+         "variables": [{"variable": "q", "value_selector": ["sys", "bogus"]}],  # invalid
+         "outputs": {"r": {"type": "string"}}},
+        {"id": "end", "type": "end", "title": "E", "outputs": []},
+    ])
+    errors = validate_spec(spec)
+    assert any("invalid sys variable 'bogus'" in e for e in errors)
+
+
+def test_validate_undeclared_conversation_var_rejected():
+    """value_selector ['conversation','MISSING'] where MISSING not in conversation_variables."""
+    spec = {
+        "mode": "advanced-chat", "name": "T", "dsl_version": "0.5.0",
+        "conversation_variables": [{"name": "memory", "value_type": "string", "description": ""}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "m", "value_selector": ["conversation", "MISSING"]}],  # not declared
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "answer", "type": "answer", "title": "A", "implementation_hint": "reply"},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "answer"}],
+    }
+    errors = validate_spec(spec)
+    assert any("conversation variable 'MISSING'" in e and "not declared" in e for e in errors)
+
+
+def test_validate_declared_conversation_var_ok():
+    """value_selector ['conversation','memory'] where memory is declared."""
+    spec = {
+        "mode": "advanced-chat", "name": "T", "dsl_version": "0.5.0",
+        "conversation_variables": [{"name": "memory", "value_type": "string", "description": ""}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "m", "value_selector": ["conversation", "memory"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "answer", "type": "answer", "title": "A", "implementation_hint": "reply"},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "answer"}],
+    }
     assert validate_spec(spec) == []
 
 
@@ -1317,6 +3699,91 @@ def test_validate_edge_coverage_transitive_ok():
     assert validate_spec(spec) == []
 
 
+def test_validate_undeclared_env_var_rejected():
+    """value_selector ['env','MISSING'] where MISSING not in environment_variables."""
+    spec = {
+        "mode": "workflow", "name": "T", "dsl_version": "0.5.0",
+        "environment_variables": [{"name": "API_KEY", "value": "v", "value_type": "string"}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "key", "value_selector": ["env", "MISSING"]}],  # not declared
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "out", "value_selector": ["code", "r"]}]},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "end"}],
+    }
+    errors = validate_spec(spec)
+    assert any("env variable 'MISSING'" in e and "not declared" in e for e in errors)
+
+
+def test_validate_declared_env_var_ok():
+    """value_selector ['env','API_KEY'] where API_KEY is declared."""
+    spec = {
+        "mode": "workflow", "name": "T", "dsl_version": "0.5.0",
+        "environment_variables": [{"name": "API_KEY", "value": "v", "value_type": "string"}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "key", "value_selector": ["env", "API_KEY"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "out", "value_selector": ["code", "r"]}]},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "end"}],
+    }
+    assert validate_spec(spec) == []
+
+
+def test_validate_invalid_sys_var_rejected():
+    """value_selector ['sys','bogus'] where bogus is not a valid system variable."""
+    spec = _spec([
+        {"id": "start", "type": "start", "title": "S"},
+        {"id": "code", "type": "code", "title": "C",
+         "variables": [{"variable": "q", "value_selector": ["sys", "bogus"]}],  # invalid
+         "outputs": {"r": {"type": "string"}}},
+        {"id": "end", "type": "end", "title": "E", "outputs": []},
+    ])
+    errors = validate_spec(spec)
+    assert any("invalid sys variable 'bogus'" in e for e in errors)
+
+
+def test_validate_undeclared_conversation_var_rejected():
+    """value_selector ['conversation','MISSING'] where MISSING not in conversation_variables."""
+    spec = {
+        "mode": "advanced-chat", "name": "T", "dsl_version": "0.5.0",
+        "conversation_variables": [{"name": "memory", "value_type": "string", "description": ""}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "m", "value_selector": ["conversation", "MISSING"]}],  # not declared
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "answer", "type": "answer", "title": "A", "implementation_hint": "reply"},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "answer"}],
+    }
+    errors = validate_spec(spec)
+    assert any("conversation variable 'MISSING'" in e and "not declared" in e for e in errors)
+
+
+def test_validate_declared_conversation_var_ok():
+    """value_selector ['conversation','memory'] where memory is declared."""
+    spec = {
+        "mode": "advanced-chat", "name": "T", "dsl_version": "0.5.0",
+        "conversation_variables": [{"name": "memory", "value_type": "string", "description": ""}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "m", "value_selector": ["conversation", "memory"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "answer", "type": "answer", "title": "A", "implementation_hint": "reply"},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "answer"}],
+    }
+    assert validate_spec(spec) == []
+
+
 def test_validate_single_element_selector_rejected():
     """value_selector ['sys.env.XXX'] is wrong - should be ['env','XXX']."""
     spec = _spec([
@@ -1362,6 +3829,91 @@ def test_validate_correct_env_selector_ok():
             {"source": "code", "target": "end"},
         ],
     )
+    assert validate_spec(spec) == []
+
+
+def test_validate_undeclared_env_var_rejected():
+    """value_selector ['env','MISSING'] where MISSING not in environment_variables."""
+    spec = {
+        "mode": "workflow", "name": "T", "dsl_version": "0.5.0",
+        "environment_variables": [{"name": "API_KEY", "value": "v", "value_type": "string"}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "key", "value_selector": ["env", "MISSING"]}],  # not declared
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "out", "value_selector": ["code", "r"]}]},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "end"}],
+    }
+    errors = validate_spec(spec)
+    assert any("env variable 'MISSING'" in e and "not declared" in e for e in errors)
+
+
+def test_validate_declared_env_var_ok():
+    """value_selector ['env','API_KEY'] where API_KEY is declared."""
+    spec = {
+        "mode": "workflow", "name": "T", "dsl_version": "0.5.0",
+        "environment_variables": [{"name": "API_KEY", "value": "v", "value_type": "string"}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "key", "value_selector": ["env", "API_KEY"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "out", "value_selector": ["code", "r"]}]},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "end"}],
+    }
+    assert validate_spec(spec) == []
+
+
+def test_validate_invalid_sys_var_rejected():
+    """value_selector ['sys','bogus'] where bogus is not a valid system variable."""
+    spec = _spec([
+        {"id": "start", "type": "start", "title": "S"},
+        {"id": "code", "type": "code", "title": "C",
+         "variables": [{"variable": "q", "value_selector": ["sys", "bogus"]}],  # invalid
+         "outputs": {"r": {"type": "string"}}},
+        {"id": "end", "type": "end", "title": "E", "outputs": []},
+    ])
+    errors = validate_spec(spec)
+    assert any("invalid sys variable 'bogus'" in e for e in errors)
+
+
+def test_validate_undeclared_conversation_var_rejected():
+    """value_selector ['conversation','MISSING'] where MISSING not in conversation_variables."""
+    spec = {
+        "mode": "advanced-chat", "name": "T", "dsl_version": "0.5.0",
+        "conversation_variables": [{"name": "memory", "value_type": "string", "description": ""}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "m", "value_selector": ["conversation", "MISSING"]}],  # not declared
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "answer", "type": "answer", "title": "A", "implementation_hint": "reply"},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "answer"}],
+    }
+    errors = validate_spec(spec)
+    assert any("conversation variable 'MISSING'" in e and "not declared" in e for e in errors)
+
+
+def test_validate_declared_conversation_var_ok():
+    """value_selector ['conversation','memory'] where memory is declared."""
+    spec = {
+        "mode": "advanced-chat", "name": "T", "dsl_version": "0.5.0",
+        "conversation_variables": [{"name": "memory", "value_type": "string", "description": ""}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "m", "value_selector": ["conversation", "memory"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "answer", "type": "answer", "title": "A", "implementation_hint": "reply"},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "answer"}],
+    }
     assert validate_spec(spec) == []
 
 
@@ -1450,6 +4002,91 @@ def test_validate_ifelse_edge_correct_src_handle_ok():
     assert validate_spec(spec) == []
 
 
+def test_validate_undeclared_env_var_rejected():
+    """value_selector ['env','MISSING'] where MISSING not in environment_variables."""
+    spec = {
+        "mode": "workflow", "name": "T", "dsl_version": "0.5.0",
+        "environment_variables": [{"name": "API_KEY", "value": "v", "value_type": "string"}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "key", "value_selector": ["env", "MISSING"]}],  # not declared
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "out", "value_selector": ["code", "r"]}]},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "end"}],
+    }
+    errors = validate_spec(spec)
+    assert any("env variable 'MISSING'" in e and "not declared" in e for e in errors)
+
+
+def test_validate_declared_env_var_ok():
+    """value_selector ['env','API_KEY'] where API_KEY is declared."""
+    spec = {
+        "mode": "workflow", "name": "T", "dsl_version": "0.5.0",
+        "environment_variables": [{"name": "API_KEY", "value": "v", "value_type": "string"}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "key", "value_selector": ["env", "API_KEY"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "out", "value_selector": ["code", "r"]}]},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "end"}],
+    }
+    assert validate_spec(spec) == []
+
+
+def test_validate_invalid_sys_var_rejected():
+    """value_selector ['sys','bogus'] where bogus is not a valid system variable."""
+    spec = _spec([
+        {"id": "start", "type": "start", "title": "S"},
+        {"id": "code", "type": "code", "title": "C",
+         "variables": [{"variable": "q", "value_selector": ["sys", "bogus"]}],  # invalid
+         "outputs": {"r": {"type": "string"}}},
+        {"id": "end", "type": "end", "title": "E", "outputs": []},
+    ])
+    errors = validate_spec(spec)
+    assert any("invalid sys variable 'bogus'" in e for e in errors)
+
+
+def test_validate_undeclared_conversation_var_rejected():
+    """value_selector ['conversation','MISSING'] where MISSING not in conversation_variables."""
+    spec = {
+        "mode": "advanced-chat", "name": "T", "dsl_version": "0.5.0",
+        "conversation_variables": [{"name": "memory", "value_type": "string", "description": ""}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "m", "value_selector": ["conversation", "MISSING"]}],  # not declared
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "answer", "type": "answer", "title": "A", "implementation_hint": "reply"},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "answer"}],
+    }
+    errors = validate_spec(spec)
+    assert any("conversation variable 'MISSING'" in e and "not declared" in e for e in errors)
+
+
+def test_validate_declared_conversation_var_ok():
+    """value_selector ['conversation','memory'] where memory is declared."""
+    spec = {
+        "mode": "advanced-chat", "name": "T", "dsl_version": "0.5.0",
+        "conversation_variables": [{"name": "memory", "value_type": "string", "description": ""}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "m", "value_selector": ["conversation", "memory"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "answer", "type": "answer", "title": "A", "implementation_hint": "reply"},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "answer"}],
+    }
+    assert validate_spec(spec) == []
+
+
 def test_validate_single_element_selector_rejected():
     """value_selector ['sys.env.XXX'] is wrong - should be ['env','XXX']."""
     spec = _spec([
@@ -1495,6 +4132,91 @@ def test_validate_correct_env_selector_ok():
             {"source": "code", "target": "end"},
         ],
     )
+    assert validate_spec(spec) == []
+
+
+def test_validate_undeclared_env_var_rejected():
+    """value_selector ['env','MISSING'] where MISSING not in environment_variables."""
+    spec = {
+        "mode": "workflow", "name": "T", "dsl_version": "0.5.0",
+        "environment_variables": [{"name": "API_KEY", "value": "v", "value_type": "string"}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "key", "value_selector": ["env", "MISSING"]}],  # not declared
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "out", "value_selector": ["code", "r"]}]},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "end"}],
+    }
+    errors = validate_spec(spec)
+    assert any("env variable 'MISSING'" in e and "not declared" in e for e in errors)
+
+
+def test_validate_declared_env_var_ok():
+    """value_selector ['env','API_KEY'] where API_KEY is declared."""
+    spec = {
+        "mode": "workflow", "name": "T", "dsl_version": "0.5.0",
+        "environment_variables": [{"name": "API_KEY", "value": "v", "value_type": "string"}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "key", "value_selector": ["env", "API_KEY"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "out", "value_selector": ["code", "r"]}]},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "end"}],
+    }
+    assert validate_spec(spec) == []
+
+
+def test_validate_invalid_sys_var_rejected():
+    """value_selector ['sys','bogus'] where bogus is not a valid system variable."""
+    spec = _spec([
+        {"id": "start", "type": "start", "title": "S"},
+        {"id": "code", "type": "code", "title": "C",
+         "variables": [{"variable": "q", "value_selector": ["sys", "bogus"]}],  # invalid
+         "outputs": {"r": {"type": "string"}}},
+        {"id": "end", "type": "end", "title": "E", "outputs": []},
+    ])
+    errors = validate_spec(spec)
+    assert any("invalid sys variable 'bogus'" in e for e in errors)
+
+
+def test_validate_undeclared_conversation_var_rejected():
+    """value_selector ['conversation','MISSING'] where MISSING not in conversation_variables."""
+    spec = {
+        "mode": "advanced-chat", "name": "T", "dsl_version": "0.5.0",
+        "conversation_variables": [{"name": "memory", "value_type": "string", "description": ""}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "m", "value_selector": ["conversation", "MISSING"]}],  # not declared
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "answer", "type": "answer", "title": "A", "implementation_hint": "reply"},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "answer"}],
+    }
+    errors = validate_spec(spec)
+    assert any("conversation variable 'MISSING'" in e and "not declared" in e for e in errors)
+
+
+def test_validate_declared_conversation_var_ok():
+    """value_selector ['conversation','memory'] where memory is declared."""
+    spec = {
+        "mode": "advanced-chat", "name": "T", "dsl_version": "0.5.0",
+        "conversation_variables": [{"name": "memory", "value_type": "string", "description": ""}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "m", "value_selector": ["conversation", "memory"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "answer", "type": "answer", "title": "A", "implementation_hint": "reply"},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "answer"}],
+    }
     assert validate_spec(spec) == []
 
 
@@ -1546,6 +4268,91 @@ def test_validate_edge_coverage_ok():
     assert validate_spec(spec) == []
 
 
+def test_validate_undeclared_env_var_rejected():
+    """value_selector ['env','MISSING'] where MISSING not in environment_variables."""
+    spec = {
+        "mode": "workflow", "name": "T", "dsl_version": "0.5.0",
+        "environment_variables": [{"name": "API_KEY", "value": "v", "value_type": "string"}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "key", "value_selector": ["env", "MISSING"]}],  # not declared
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "out", "value_selector": ["code", "r"]}]},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "end"}],
+    }
+    errors = validate_spec(spec)
+    assert any("env variable 'MISSING'" in e and "not declared" in e for e in errors)
+
+
+def test_validate_declared_env_var_ok():
+    """value_selector ['env','API_KEY'] where API_KEY is declared."""
+    spec = {
+        "mode": "workflow", "name": "T", "dsl_version": "0.5.0",
+        "environment_variables": [{"name": "API_KEY", "value": "v", "value_type": "string"}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "key", "value_selector": ["env", "API_KEY"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "out", "value_selector": ["code", "r"]}]},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "end"}],
+    }
+    assert validate_spec(spec) == []
+
+
+def test_validate_invalid_sys_var_rejected():
+    """value_selector ['sys','bogus'] where bogus is not a valid system variable."""
+    spec = _spec([
+        {"id": "start", "type": "start", "title": "S"},
+        {"id": "code", "type": "code", "title": "C",
+         "variables": [{"variable": "q", "value_selector": ["sys", "bogus"]}],  # invalid
+         "outputs": {"r": {"type": "string"}}},
+        {"id": "end", "type": "end", "title": "E", "outputs": []},
+    ])
+    errors = validate_spec(spec)
+    assert any("invalid sys variable 'bogus'" in e for e in errors)
+
+
+def test_validate_undeclared_conversation_var_rejected():
+    """value_selector ['conversation','MISSING'] where MISSING not in conversation_variables."""
+    spec = {
+        "mode": "advanced-chat", "name": "T", "dsl_version": "0.5.0",
+        "conversation_variables": [{"name": "memory", "value_type": "string", "description": ""}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "m", "value_selector": ["conversation", "MISSING"]}],  # not declared
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "answer", "type": "answer", "title": "A", "implementation_hint": "reply"},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "answer"}],
+    }
+    errors = validate_spec(spec)
+    assert any("conversation variable 'MISSING'" in e and "not declared" in e for e in errors)
+
+
+def test_validate_declared_conversation_var_ok():
+    """value_selector ['conversation','memory'] where memory is declared."""
+    spec = {
+        "mode": "advanced-chat", "name": "T", "dsl_version": "0.5.0",
+        "conversation_variables": [{"name": "memory", "value_type": "string", "description": ""}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "m", "value_selector": ["conversation", "memory"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "answer", "type": "answer", "title": "A", "implementation_hint": "reply"},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "answer"}],
+    }
+    assert validate_spec(spec) == []
+
+
 def test_validate_single_element_selector_rejected():
     """value_selector ['sys.env.XXX'] is wrong - should be ['env','XXX']."""
     spec = _spec([
@@ -1591,6 +4398,91 @@ def test_validate_correct_env_selector_ok():
             {"source": "code", "target": "end"},
         ],
     )
+    assert validate_spec(spec) == []
+
+
+def test_validate_undeclared_env_var_rejected():
+    """value_selector ['env','MISSING'] where MISSING not in environment_variables."""
+    spec = {
+        "mode": "workflow", "name": "T", "dsl_version": "0.5.0",
+        "environment_variables": [{"name": "API_KEY", "value": "v", "value_type": "string"}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "key", "value_selector": ["env", "MISSING"]}],  # not declared
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "out", "value_selector": ["code", "r"]}]},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "end"}],
+    }
+    errors = validate_spec(spec)
+    assert any("env variable 'MISSING'" in e and "not declared" in e for e in errors)
+
+
+def test_validate_declared_env_var_ok():
+    """value_selector ['env','API_KEY'] where API_KEY is declared."""
+    spec = {
+        "mode": "workflow", "name": "T", "dsl_version": "0.5.0",
+        "environment_variables": [{"name": "API_KEY", "value": "v", "value_type": "string"}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "key", "value_selector": ["env", "API_KEY"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "out", "value_selector": ["code", "r"]}]},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "end"}],
+    }
+    assert validate_spec(spec) == []
+
+
+def test_validate_invalid_sys_var_rejected():
+    """value_selector ['sys','bogus'] where bogus is not a valid system variable."""
+    spec = _spec([
+        {"id": "start", "type": "start", "title": "S"},
+        {"id": "code", "type": "code", "title": "C",
+         "variables": [{"variable": "q", "value_selector": ["sys", "bogus"]}],  # invalid
+         "outputs": {"r": {"type": "string"}}},
+        {"id": "end", "type": "end", "title": "E", "outputs": []},
+    ])
+    errors = validate_spec(spec)
+    assert any("invalid sys variable 'bogus'" in e for e in errors)
+
+
+def test_validate_undeclared_conversation_var_rejected():
+    """value_selector ['conversation','MISSING'] where MISSING not in conversation_variables."""
+    spec = {
+        "mode": "advanced-chat", "name": "T", "dsl_version": "0.5.0",
+        "conversation_variables": [{"name": "memory", "value_type": "string", "description": ""}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "m", "value_selector": ["conversation", "MISSING"]}],  # not declared
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "answer", "type": "answer", "title": "A", "implementation_hint": "reply"},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "answer"}],
+    }
+    errors = validate_spec(spec)
+    assert any("conversation variable 'MISSING'" in e and "not declared" in e for e in errors)
+
+
+def test_validate_declared_conversation_var_ok():
+    """value_selector ['conversation','memory'] where memory is declared."""
+    spec = {
+        "mode": "advanced-chat", "name": "T", "dsl_version": "0.5.0",
+        "conversation_variables": [{"name": "memory", "value_type": "string", "description": ""}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "m", "value_selector": ["conversation", "memory"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "answer", "type": "answer", "title": "A", "implementation_hint": "reply"},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "answer"}],
+    }
     assert validate_spec(spec) == []
 
 
@@ -1615,6 +4507,91 @@ def test_validate_edge_coverage_transitive_ok():
     assert validate_spec(spec) == []
 
 
+def test_validate_undeclared_env_var_rejected():
+    """value_selector ['env','MISSING'] where MISSING not in environment_variables."""
+    spec = {
+        "mode": "workflow", "name": "T", "dsl_version": "0.5.0",
+        "environment_variables": [{"name": "API_KEY", "value": "v", "value_type": "string"}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "key", "value_selector": ["env", "MISSING"]}],  # not declared
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "out", "value_selector": ["code", "r"]}]},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "end"}],
+    }
+    errors = validate_spec(spec)
+    assert any("env variable 'MISSING'" in e and "not declared" in e for e in errors)
+
+
+def test_validate_declared_env_var_ok():
+    """value_selector ['env','API_KEY'] where API_KEY is declared."""
+    spec = {
+        "mode": "workflow", "name": "T", "dsl_version": "0.5.0",
+        "environment_variables": [{"name": "API_KEY", "value": "v", "value_type": "string"}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "key", "value_selector": ["env", "API_KEY"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "out", "value_selector": ["code", "r"]}]},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "end"}],
+    }
+    assert validate_spec(spec) == []
+
+
+def test_validate_invalid_sys_var_rejected():
+    """value_selector ['sys','bogus'] where bogus is not a valid system variable."""
+    spec = _spec([
+        {"id": "start", "type": "start", "title": "S"},
+        {"id": "code", "type": "code", "title": "C",
+         "variables": [{"variable": "q", "value_selector": ["sys", "bogus"]}],  # invalid
+         "outputs": {"r": {"type": "string"}}},
+        {"id": "end", "type": "end", "title": "E", "outputs": []},
+    ])
+    errors = validate_spec(spec)
+    assert any("invalid sys variable 'bogus'" in e for e in errors)
+
+
+def test_validate_undeclared_conversation_var_rejected():
+    """value_selector ['conversation','MISSING'] where MISSING not in conversation_variables."""
+    spec = {
+        "mode": "advanced-chat", "name": "T", "dsl_version": "0.5.0",
+        "conversation_variables": [{"name": "memory", "value_type": "string", "description": ""}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "m", "value_selector": ["conversation", "MISSING"]}],  # not declared
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "answer", "type": "answer", "title": "A", "implementation_hint": "reply"},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "answer"}],
+    }
+    errors = validate_spec(spec)
+    assert any("conversation variable 'MISSING'" in e and "not declared" in e for e in errors)
+
+
+def test_validate_declared_conversation_var_ok():
+    """value_selector ['conversation','memory'] where memory is declared."""
+    spec = {
+        "mode": "advanced-chat", "name": "T", "dsl_version": "0.5.0",
+        "conversation_variables": [{"name": "memory", "value_type": "string", "description": ""}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "m", "value_selector": ["conversation", "memory"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "answer", "type": "answer", "title": "A", "implementation_hint": "reply"},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "answer"}],
+    }
+    assert validate_spec(spec) == []
+
+
 def test_validate_single_element_selector_rejected():
     """value_selector ['sys.env.XXX'] is wrong - should be ['env','XXX']."""
     spec = _spec([
@@ -1644,9 +4621,11 @@ def test_validate_dotted_first_element_rejected():
 
 
 def test_validate_correct_env_selector_ok():
-    """value_selector ['env','KEY'] is correct."""
-    spec = _spec(
-        [
+    """value_selector ['env','KEY'] is correct (KEY declared)."""
+    spec = {
+        "mode": "workflow", "name": "T", "dsl_version": "0.5.0",
+        "environment_variables": [{"name": "KEY", "value": "v", "value_type": "string"}],
+        "nodes": [
             {"id": "start", "type": "start", "title": "S",
              "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
             {"id": "code", "type": "code", "title": "C",
@@ -1655,9 +4634,94 @@ def test_validate_correct_env_selector_ok():
             {"id": "end", "type": "end", "title": "E",
              "outputs": [{"variable": "out", "value_selector": ["code", "r"]}]},
         ],
-        [
+        "edges": [
             {"source": "start", "target": "code"},
             {"source": "code", "target": "end"},
         ],
-    )
+    }
+    assert validate_spec(spec) == []
+
+
+def test_validate_undeclared_env_var_rejected():
+    """value_selector ['env','MISSING'] where MISSING not in environment_variables."""
+    spec = {
+        "mode": "workflow", "name": "T", "dsl_version": "0.5.0",
+        "environment_variables": [{"name": "API_KEY", "value": "v", "value_type": "string"}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "key", "value_selector": ["env", "MISSING"]}],  # not declared
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "out", "value_selector": ["code", "r"]}]},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "end"}],
+    }
+    errors = validate_spec(spec)
+    assert any("env variable 'MISSING'" in e and "not declared" in e for e in errors)
+
+
+def test_validate_declared_env_var_ok():
+    """value_selector ['env','API_KEY'] where API_KEY is declared."""
+    spec = {
+        "mode": "workflow", "name": "T", "dsl_version": "0.5.0",
+        "environment_variables": [{"name": "API_KEY", "value": "v", "value_type": "string"}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "key", "value_selector": ["env", "API_KEY"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "out", "value_selector": ["code", "r"]}]},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "end"}],
+    }
+    assert validate_spec(spec) == []
+
+
+def test_validate_invalid_sys_var_rejected():
+    """value_selector ['sys','bogus'] where bogus is not a valid system variable."""
+    spec = _spec([
+        {"id": "start", "type": "start", "title": "S"},
+        {"id": "code", "type": "code", "title": "C",
+         "variables": [{"variable": "q", "value_selector": ["sys", "bogus"]}],  # invalid
+         "outputs": {"r": {"type": "string"}}},
+        {"id": "end", "type": "end", "title": "E", "outputs": []},
+    ])
+    errors = validate_spec(spec)
+    assert any("invalid sys variable 'bogus'" in e for e in errors)
+
+
+def test_validate_undeclared_conversation_var_rejected():
+    """value_selector ['conversation','MISSING'] where MISSING not in conversation_variables."""
+    spec = {
+        "mode": "advanced-chat", "name": "T", "dsl_version": "0.5.0",
+        "conversation_variables": [{"name": "memory", "value_type": "string", "description": ""}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "m", "value_selector": ["conversation", "MISSING"]}],  # not declared
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "answer", "type": "answer", "title": "A", "implementation_hint": "reply"},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "answer"}],
+    }
+    errors = validate_spec(spec)
+    assert any("conversation variable 'MISSING'" in e and "not declared" in e for e in errors)
+
+
+def test_validate_declared_conversation_var_ok():
+    """value_selector ['conversation','memory'] where memory is declared."""
+    spec = {
+        "mode": "advanced-chat", "name": "T", "dsl_version": "0.5.0",
+        "conversation_variables": [{"name": "memory", "value_type": "string", "description": ""}],
+        "nodes": [
+            {"id": "start", "type": "start", "title": "S"},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "m", "value_selector": ["conversation", "memory"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "answer", "type": "answer", "title": "A", "implementation_hint": "reply"},
+        ],
+        "edges": [{"source": "start", "target": "code"}, {"source": "code", "target": "answer"}],
+    }
     assert validate_spec(spec) == []
