@@ -28,6 +28,54 @@ def test_validate_clean_workflow():
     assert validate_spec(spec) == []
 
 
+def test_validate_single_element_selector_rejected():
+    """value_selector ['sys.env.XXX'] is wrong - should be ['env','XXX']."""
+    spec = _spec([
+        {"id": "start", "type": "start", "title": "S",
+         "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+        {"id": "code", "type": "code", "title": "C",
+         "variables": [{"variable": "key", "value_selector": ["env.KEY"]}],  # WRONG
+         "outputs": {"r": {"type": "string"}}},
+        {"id": "end", "type": "end", "title": "E", "outputs": []},
+    ])
+    errors = validate_spec(spec)
+    assert any("single-element" in e and "'env.KEY'" in e for e in errors)
+
+
+def test_validate_dotted_first_element_rejected():
+    """selector ['sys.env.XXX', 'val'] has dotted first element."""
+    spec = _spec([
+        {"id": "start", "type": "start", "title": "S",
+         "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+        {"id": "code", "type": "code", "title": "C",
+         "variables": [{"variable": "key", "value_selector": ["sys.env.XXX", "val"]}],  # WRONG
+         "outputs": {"r": {"type": "string"}}},
+        {"id": "end", "type": "end", "title": "E", "outputs": []},
+    ])
+    errors = validate_spec(spec)
+    assert any("dotted path" in e for e in errors)
+
+
+def test_validate_correct_env_selector_ok():
+    """value_selector ['env','KEY'] is correct."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "key", "value_selector": ["env", "KEY"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "out", "value_selector": ["code", "r"]}]},
+        ],
+        [
+            {"source": "start", "target": "code"},
+            {"source": "code", "target": "end"},
+        ],
+    )
+    assert validate_spec(spec) == []
+
+
 def test_validate_missing_edge_between_siblings():
     """Node references another node's output but no edge connects them."""
     spec = _spec(
@@ -76,6 +124,54 @@ def test_validate_edge_coverage_ok():
     assert validate_spec(spec) == []
 
 
+def test_validate_single_element_selector_rejected():
+    """value_selector ['sys.env.XXX'] is wrong - should be ['env','XXX']."""
+    spec = _spec([
+        {"id": "start", "type": "start", "title": "S",
+         "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+        {"id": "code", "type": "code", "title": "C",
+         "variables": [{"variable": "key", "value_selector": ["env.KEY"]}],  # WRONG
+         "outputs": {"r": {"type": "string"}}},
+        {"id": "end", "type": "end", "title": "E", "outputs": []},
+    ])
+    errors = validate_spec(spec)
+    assert any("single-element" in e and "'env.KEY'" in e for e in errors)
+
+
+def test_validate_dotted_first_element_rejected():
+    """selector ['sys.env.XXX', 'val'] has dotted first element."""
+    spec = _spec([
+        {"id": "start", "type": "start", "title": "S",
+         "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+        {"id": "code", "type": "code", "title": "C",
+         "variables": [{"variable": "key", "value_selector": ["sys.env.XXX", "val"]}],  # WRONG
+         "outputs": {"r": {"type": "string"}}},
+        {"id": "end", "type": "end", "title": "E", "outputs": []},
+    ])
+    errors = validate_spec(spec)
+    assert any("dotted path" in e for e in errors)
+
+
+def test_validate_correct_env_selector_ok():
+    """value_selector ['env','KEY'] is correct."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "key", "value_selector": ["env", "KEY"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "out", "value_selector": ["code", "r"]}]},
+        ],
+        [
+            {"source": "start", "target": "code"},
+            {"source": "code", "target": "end"},
+        ],
+    )
+    assert validate_spec(spec) == []
+
+
 def test_validate_edge_coverage_transitive_ok():
     """Transitive path is enough: A->B->C, C references A's output."""
     spec = _spec(
@@ -92,6 +188,54 @@ def test_validate_edge_coverage_transitive_ok():
             {"source": "start", "target": "mid"},
             {"source": "mid", "target": "end"},
             # end references start, path: start -> mid -> end (transitive)
+        ],
+    )
+    assert validate_spec(spec) == []
+
+
+def test_validate_single_element_selector_rejected():
+    """value_selector ['sys.env.XXX'] is wrong - should be ['env','XXX']."""
+    spec = _spec([
+        {"id": "start", "type": "start", "title": "S",
+         "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+        {"id": "code", "type": "code", "title": "C",
+         "variables": [{"variable": "key", "value_selector": ["env.KEY"]}],  # WRONG
+         "outputs": {"r": {"type": "string"}}},
+        {"id": "end", "type": "end", "title": "E", "outputs": []},
+    ])
+    errors = validate_spec(spec)
+    assert any("single-element" in e and "'env.KEY'" in e for e in errors)
+
+
+def test_validate_dotted_first_element_rejected():
+    """selector ['sys.env.XXX', 'val'] has dotted first element."""
+    spec = _spec([
+        {"id": "start", "type": "start", "title": "S",
+         "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+        {"id": "code", "type": "code", "title": "C",
+         "variables": [{"variable": "key", "value_selector": ["sys.env.XXX", "val"]}],  # WRONG
+         "outputs": {"r": {"type": "string"}}},
+        {"id": "end", "type": "end", "title": "E", "outputs": []},
+    ])
+    errors = validate_spec(spec)
+    assert any("dotted path" in e for e in errors)
+
+
+def test_validate_correct_env_selector_ok():
+    """value_selector ['env','KEY'] is correct."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "key", "value_selector": ["env", "KEY"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "out", "value_selector": ["code", "r"]}]},
+        ],
+        [
+            {"source": "start", "target": "code"},
+            {"source": "code", "target": "end"},
         ],
     )
     assert validate_spec(spec) == []
@@ -157,6 +301,54 @@ def test_validate_iteration_output_selector_can_reference_child():
     assert validate_spec(spec) == []
 
 
+def test_validate_single_element_selector_rejected():
+    """value_selector ['sys.env.XXX'] is wrong - should be ['env','XXX']."""
+    spec = _spec([
+        {"id": "start", "type": "start", "title": "S",
+         "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+        {"id": "code", "type": "code", "title": "C",
+         "variables": [{"variable": "key", "value_selector": ["env.KEY"]}],  # WRONG
+         "outputs": {"r": {"type": "string"}}},
+        {"id": "end", "type": "end", "title": "E", "outputs": []},
+    ])
+    errors = validate_spec(spec)
+    assert any("single-element" in e and "'env.KEY'" in e for e in errors)
+
+
+def test_validate_dotted_first_element_rejected():
+    """selector ['sys.env.XXX', 'val'] has dotted first element."""
+    spec = _spec([
+        {"id": "start", "type": "start", "title": "S",
+         "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+        {"id": "code", "type": "code", "title": "C",
+         "variables": [{"variable": "key", "value_selector": ["sys.env.XXX", "val"]}],  # WRONG
+         "outputs": {"r": {"type": "string"}}},
+        {"id": "end", "type": "end", "title": "E", "outputs": []},
+    ])
+    errors = validate_spec(spec)
+    assert any("dotted path" in e for e in errors)
+
+
+def test_validate_correct_env_selector_ok():
+    """value_selector ['env','KEY'] is correct."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "key", "value_selector": ["env", "KEY"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "out", "value_selector": ["code", "r"]}]},
+        ],
+        [
+            {"source": "start", "target": "code"},
+            {"source": "code", "target": "end"},
+        ],
+    )
+    assert validate_spec(spec) == []
+
+
 def test_validate_missing_edge_between_siblings():
     """Node references another node's output but no edge connects them."""
     spec = _spec(
@@ -205,6 +397,54 @@ def test_validate_edge_coverage_ok():
     assert validate_spec(spec) == []
 
 
+def test_validate_single_element_selector_rejected():
+    """value_selector ['sys.env.XXX'] is wrong - should be ['env','XXX']."""
+    spec = _spec([
+        {"id": "start", "type": "start", "title": "S",
+         "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+        {"id": "code", "type": "code", "title": "C",
+         "variables": [{"variable": "key", "value_selector": ["env.KEY"]}],  # WRONG
+         "outputs": {"r": {"type": "string"}}},
+        {"id": "end", "type": "end", "title": "E", "outputs": []},
+    ])
+    errors = validate_spec(spec)
+    assert any("single-element" in e and "'env.KEY'" in e for e in errors)
+
+
+def test_validate_dotted_first_element_rejected():
+    """selector ['sys.env.XXX', 'val'] has dotted first element."""
+    spec = _spec([
+        {"id": "start", "type": "start", "title": "S",
+         "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+        {"id": "code", "type": "code", "title": "C",
+         "variables": [{"variable": "key", "value_selector": ["sys.env.XXX", "val"]}],  # WRONG
+         "outputs": {"r": {"type": "string"}}},
+        {"id": "end", "type": "end", "title": "E", "outputs": []},
+    ])
+    errors = validate_spec(spec)
+    assert any("dotted path" in e for e in errors)
+
+
+def test_validate_correct_env_selector_ok():
+    """value_selector ['env','KEY'] is correct."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "key", "value_selector": ["env", "KEY"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "out", "value_selector": ["code", "r"]}]},
+        ],
+        [
+            {"source": "start", "target": "code"},
+            {"source": "code", "target": "end"},
+        ],
+    )
+    assert validate_spec(spec) == []
+
+
 def test_validate_edge_coverage_transitive_ok():
     """Transitive path is enough: A->B->C, C references A's output."""
     spec = _spec(
@@ -221,6 +461,54 @@ def test_validate_edge_coverage_transitive_ok():
             {"source": "start", "target": "mid"},
             {"source": "mid", "target": "end"},
             # end references start, path: start -> mid -> end (transitive)
+        ],
+    )
+    assert validate_spec(spec) == []
+
+
+def test_validate_single_element_selector_rejected():
+    """value_selector ['sys.env.XXX'] is wrong - should be ['env','XXX']."""
+    spec = _spec([
+        {"id": "start", "type": "start", "title": "S",
+         "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+        {"id": "code", "type": "code", "title": "C",
+         "variables": [{"variable": "key", "value_selector": ["env.KEY"]}],  # WRONG
+         "outputs": {"r": {"type": "string"}}},
+        {"id": "end", "type": "end", "title": "E", "outputs": []},
+    ])
+    errors = validate_spec(spec)
+    assert any("single-element" in e and "'env.KEY'" in e for e in errors)
+
+
+def test_validate_dotted_first_element_rejected():
+    """selector ['sys.env.XXX', 'val'] has dotted first element."""
+    spec = _spec([
+        {"id": "start", "type": "start", "title": "S",
+         "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+        {"id": "code", "type": "code", "title": "C",
+         "variables": [{"variable": "key", "value_selector": ["sys.env.XXX", "val"]}],  # WRONG
+         "outputs": {"r": {"type": "string"}}},
+        {"id": "end", "type": "end", "title": "E", "outputs": []},
+    ])
+    errors = validate_spec(spec)
+    assert any("dotted path" in e for e in errors)
+
+
+def test_validate_correct_env_selector_ok():
+    """value_selector ['env','KEY'] is correct."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "key", "value_selector": ["env", "KEY"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "out", "value_selector": ["code", "r"]}]},
+        ],
+        [
+            {"source": "start", "target": "code"},
+            {"source": "code", "target": "end"},
         ],
     )
     assert validate_spec(spec) == []
@@ -268,6 +556,54 @@ def test_validate_loop_with_loop_variables_ok():
     assert validate_spec(spec) == []
 
 
+def test_validate_single_element_selector_rejected():
+    """value_selector ['sys.env.XXX'] is wrong - should be ['env','XXX']."""
+    spec = _spec([
+        {"id": "start", "type": "start", "title": "S",
+         "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+        {"id": "code", "type": "code", "title": "C",
+         "variables": [{"variable": "key", "value_selector": ["env.KEY"]}],  # WRONG
+         "outputs": {"r": {"type": "string"}}},
+        {"id": "end", "type": "end", "title": "E", "outputs": []},
+    ])
+    errors = validate_spec(spec)
+    assert any("single-element" in e and "'env.KEY'" in e for e in errors)
+
+
+def test_validate_dotted_first_element_rejected():
+    """selector ['sys.env.XXX', 'val'] has dotted first element."""
+    spec = _spec([
+        {"id": "start", "type": "start", "title": "S",
+         "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+        {"id": "code", "type": "code", "title": "C",
+         "variables": [{"variable": "key", "value_selector": ["sys.env.XXX", "val"]}],  # WRONG
+         "outputs": {"r": {"type": "string"}}},
+        {"id": "end", "type": "end", "title": "E", "outputs": []},
+    ])
+    errors = validate_spec(spec)
+    assert any("dotted path" in e for e in errors)
+
+
+def test_validate_correct_env_selector_ok():
+    """value_selector ['env','KEY'] is correct."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "key", "value_selector": ["env", "KEY"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "out", "value_selector": ["code", "r"]}]},
+        ],
+        [
+            {"source": "start", "target": "code"},
+            {"source": "code", "target": "end"},
+        ],
+    )
+    assert validate_spec(spec) == []
+
+
 def test_validate_missing_edge_between_siblings():
     """Node references another node's output but no edge connects them."""
     spec = _spec(
@@ -316,6 +652,54 @@ def test_validate_edge_coverage_ok():
     assert validate_spec(spec) == []
 
 
+def test_validate_single_element_selector_rejected():
+    """value_selector ['sys.env.XXX'] is wrong - should be ['env','XXX']."""
+    spec = _spec([
+        {"id": "start", "type": "start", "title": "S",
+         "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+        {"id": "code", "type": "code", "title": "C",
+         "variables": [{"variable": "key", "value_selector": ["env.KEY"]}],  # WRONG
+         "outputs": {"r": {"type": "string"}}},
+        {"id": "end", "type": "end", "title": "E", "outputs": []},
+    ])
+    errors = validate_spec(spec)
+    assert any("single-element" in e and "'env.KEY'" in e for e in errors)
+
+
+def test_validate_dotted_first_element_rejected():
+    """selector ['sys.env.XXX', 'val'] has dotted first element."""
+    spec = _spec([
+        {"id": "start", "type": "start", "title": "S",
+         "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+        {"id": "code", "type": "code", "title": "C",
+         "variables": [{"variable": "key", "value_selector": ["sys.env.XXX", "val"]}],  # WRONG
+         "outputs": {"r": {"type": "string"}}},
+        {"id": "end", "type": "end", "title": "E", "outputs": []},
+    ])
+    errors = validate_spec(spec)
+    assert any("dotted path" in e for e in errors)
+
+
+def test_validate_correct_env_selector_ok():
+    """value_selector ['env','KEY'] is correct."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "key", "value_selector": ["env", "KEY"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "out", "value_selector": ["code", "r"]}]},
+        ],
+        [
+            {"source": "start", "target": "code"},
+            {"source": "code", "target": "end"},
+        ],
+    )
+    assert validate_spec(spec) == []
+
+
 def test_validate_edge_coverage_transitive_ok():
     """Transitive path is enough: A->B->C, C references A's output."""
     spec = _spec(
@@ -332,6 +716,54 @@ def test_validate_edge_coverage_transitive_ok():
             {"source": "start", "target": "mid"},
             {"source": "mid", "target": "end"},
             # end references start, path: start -> mid -> end (transitive)
+        ],
+    )
+    assert validate_spec(spec) == []
+
+
+def test_validate_single_element_selector_rejected():
+    """value_selector ['sys.env.XXX'] is wrong - should be ['env','XXX']."""
+    spec = _spec([
+        {"id": "start", "type": "start", "title": "S",
+         "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+        {"id": "code", "type": "code", "title": "C",
+         "variables": [{"variable": "key", "value_selector": ["env.KEY"]}],  # WRONG
+         "outputs": {"r": {"type": "string"}}},
+        {"id": "end", "type": "end", "title": "E", "outputs": []},
+    ])
+    errors = validate_spec(spec)
+    assert any("single-element" in e and "'env.KEY'" in e for e in errors)
+
+
+def test_validate_dotted_first_element_rejected():
+    """selector ['sys.env.XXX', 'val'] has dotted first element."""
+    spec = _spec([
+        {"id": "start", "type": "start", "title": "S",
+         "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+        {"id": "code", "type": "code", "title": "C",
+         "variables": [{"variable": "key", "value_selector": ["sys.env.XXX", "val"]}],  # WRONG
+         "outputs": {"r": {"type": "string"}}},
+        {"id": "end", "type": "end", "title": "E", "outputs": []},
+    ])
+    errors = validate_spec(spec)
+    assert any("dotted path" in e for e in errors)
+
+
+def test_validate_correct_env_selector_ok():
+    """value_selector ['env','KEY'] is correct."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "key", "value_selector": ["env", "KEY"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "out", "value_selector": ["code", "r"]}]},
+        ],
+        [
+            {"source": "start", "target": "code"},
+            {"source": "code", "target": "end"},
         ],
     )
     assert validate_spec(spec) == []
@@ -452,6 +884,54 @@ def test_validate_correct_container_edges_ok():
     assert validate_spec(spec) == []
 
 
+def test_validate_single_element_selector_rejected():
+    """value_selector ['sys.env.XXX'] is wrong - should be ['env','XXX']."""
+    spec = _spec([
+        {"id": "start", "type": "start", "title": "S",
+         "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+        {"id": "code", "type": "code", "title": "C",
+         "variables": [{"variable": "key", "value_selector": ["env.KEY"]}],  # WRONG
+         "outputs": {"r": {"type": "string"}}},
+        {"id": "end", "type": "end", "title": "E", "outputs": []},
+    ])
+    errors = validate_spec(spec)
+    assert any("single-element" in e and "'env.KEY'" in e for e in errors)
+
+
+def test_validate_dotted_first_element_rejected():
+    """selector ['sys.env.XXX', 'val'] has dotted first element."""
+    spec = _spec([
+        {"id": "start", "type": "start", "title": "S",
+         "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+        {"id": "code", "type": "code", "title": "C",
+         "variables": [{"variable": "key", "value_selector": ["sys.env.XXX", "val"]}],  # WRONG
+         "outputs": {"r": {"type": "string"}}},
+        {"id": "end", "type": "end", "title": "E", "outputs": []},
+    ])
+    errors = validate_spec(spec)
+    assert any("dotted path" in e for e in errors)
+
+
+def test_validate_correct_env_selector_ok():
+    """value_selector ['env','KEY'] is correct."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "key", "value_selector": ["env", "KEY"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "out", "value_selector": ["code", "r"]}]},
+        ],
+        [
+            {"source": "start", "target": "code"},
+            {"source": "code", "target": "end"},
+        ],
+    )
+    assert validate_spec(spec) == []
+
+
 def test_validate_missing_edge_between_siblings():
     """Node references another node's output but no edge connects them."""
     spec = _spec(
@@ -500,6 +980,54 @@ def test_validate_edge_coverage_ok():
     assert validate_spec(spec) == []
 
 
+def test_validate_single_element_selector_rejected():
+    """value_selector ['sys.env.XXX'] is wrong - should be ['env','XXX']."""
+    spec = _spec([
+        {"id": "start", "type": "start", "title": "S",
+         "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+        {"id": "code", "type": "code", "title": "C",
+         "variables": [{"variable": "key", "value_selector": ["env.KEY"]}],  # WRONG
+         "outputs": {"r": {"type": "string"}}},
+        {"id": "end", "type": "end", "title": "E", "outputs": []},
+    ])
+    errors = validate_spec(spec)
+    assert any("single-element" in e and "'env.KEY'" in e for e in errors)
+
+
+def test_validate_dotted_first_element_rejected():
+    """selector ['sys.env.XXX', 'val'] has dotted first element."""
+    spec = _spec([
+        {"id": "start", "type": "start", "title": "S",
+         "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+        {"id": "code", "type": "code", "title": "C",
+         "variables": [{"variable": "key", "value_selector": ["sys.env.XXX", "val"]}],  # WRONG
+         "outputs": {"r": {"type": "string"}}},
+        {"id": "end", "type": "end", "title": "E", "outputs": []},
+    ])
+    errors = validate_spec(spec)
+    assert any("dotted path" in e for e in errors)
+
+
+def test_validate_correct_env_selector_ok():
+    """value_selector ['env','KEY'] is correct."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "key", "value_selector": ["env", "KEY"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "out", "value_selector": ["code", "r"]}]},
+        ],
+        [
+            {"source": "start", "target": "code"},
+            {"source": "code", "target": "end"},
+        ],
+    )
+    assert validate_spec(spec) == []
+
+
 def test_validate_edge_coverage_transitive_ok():
     """Transitive path is enough: A->B->C, C references A's output."""
     spec = _spec(
@@ -516,6 +1044,54 @@ def test_validate_edge_coverage_transitive_ok():
             {"source": "start", "target": "mid"},
             {"source": "mid", "target": "end"},
             # end references start, path: start -> mid -> end (transitive)
+        ],
+    )
+    assert validate_spec(spec) == []
+
+
+def test_validate_single_element_selector_rejected():
+    """value_selector ['sys.env.XXX'] is wrong - should be ['env','XXX']."""
+    spec = _spec([
+        {"id": "start", "type": "start", "title": "S",
+         "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+        {"id": "code", "type": "code", "title": "C",
+         "variables": [{"variable": "key", "value_selector": ["env.KEY"]}],  # WRONG
+         "outputs": {"r": {"type": "string"}}},
+        {"id": "end", "type": "end", "title": "E", "outputs": []},
+    ])
+    errors = validate_spec(spec)
+    assert any("single-element" in e and "'env.KEY'" in e for e in errors)
+
+
+def test_validate_dotted_first_element_rejected():
+    """selector ['sys.env.XXX', 'val'] has dotted first element."""
+    spec = _spec([
+        {"id": "start", "type": "start", "title": "S",
+         "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+        {"id": "code", "type": "code", "title": "C",
+         "variables": [{"variable": "key", "value_selector": ["sys.env.XXX", "val"]}],  # WRONG
+         "outputs": {"r": {"type": "string"}}},
+        {"id": "end", "type": "end", "title": "E", "outputs": []},
+    ])
+    errors = validate_spec(spec)
+    assert any("dotted path" in e for e in errors)
+
+
+def test_validate_correct_env_selector_ok():
+    """value_selector ['env','KEY'] is correct."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "key", "value_selector": ["env", "KEY"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "out", "value_selector": ["code", "r"]}]},
+        ],
+        [
+            {"source": "start", "target": "code"},
+            {"source": "code", "target": "end"},
         ],
     )
     assert validate_spec(spec) == []
@@ -576,6 +1152,54 @@ def test_validate_answer_in_advanced_chat_ok():
     assert validate_spec(spec) == []
 
 
+def test_validate_single_element_selector_rejected():
+    """value_selector ['sys.env.XXX'] is wrong - should be ['env','XXX']."""
+    spec = _spec([
+        {"id": "start", "type": "start", "title": "S",
+         "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+        {"id": "code", "type": "code", "title": "C",
+         "variables": [{"variable": "key", "value_selector": ["env.KEY"]}],  # WRONG
+         "outputs": {"r": {"type": "string"}}},
+        {"id": "end", "type": "end", "title": "E", "outputs": []},
+    ])
+    errors = validate_spec(spec)
+    assert any("single-element" in e and "'env.KEY'" in e for e in errors)
+
+
+def test_validate_dotted_first_element_rejected():
+    """selector ['sys.env.XXX', 'val'] has dotted first element."""
+    spec = _spec([
+        {"id": "start", "type": "start", "title": "S",
+         "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+        {"id": "code", "type": "code", "title": "C",
+         "variables": [{"variable": "key", "value_selector": ["sys.env.XXX", "val"]}],  # WRONG
+         "outputs": {"r": {"type": "string"}}},
+        {"id": "end", "type": "end", "title": "E", "outputs": []},
+    ])
+    errors = validate_spec(spec)
+    assert any("dotted path" in e for e in errors)
+
+
+def test_validate_correct_env_selector_ok():
+    """value_selector ['env','KEY'] is correct."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "key", "value_selector": ["env", "KEY"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "out", "value_selector": ["code", "r"]}]},
+        ],
+        [
+            {"source": "start", "target": "code"},
+            {"source": "code", "target": "end"},
+        ],
+    )
+    assert validate_spec(spec) == []
+
+
 def test_validate_missing_edge_between_siblings():
     """Node references another node's output but no edge connects them."""
     spec = _spec(
@@ -624,6 +1248,54 @@ def test_validate_edge_coverage_ok():
     assert validate_spec(spec) == []
 
 
+def test_validate_single_element_selector_rejected():
+    """value_selector ['sys.env.XXX'] is wrong - should be ['env','XXX']."""
+    spec = _spec([
+        {"id": "start", "type": "start", "title": "S",
+         "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+        {"id": "code", "type": "code", "title": "C",
+         "variables": [{"variable": "key", "value_selector": ["env.KEY"]}],  # WRONG
+         "outputs": {"r": {"type": "string"}}},
+        {"id": "end", "type": "end", "title": "E", "outputs": []},
+    ])
+    errors = validate_spec(spec)
+    assert any("single-element" in e and "'env.KEY'" in e for e in errors)
+
+
+def test_validate_dotted_first_element_rejected():
+    """selector ['sys.env.XXX', 'val'] has dotted first element."""
+    spec = _spec([
+        {"id": "start", "type": "start", "title": "S",
+         "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+        {"id": "code", "type": "code", "title": "C",
+         "variables": [{"variable": "key", "value_selector": ["sys.env.XXX", "val"]}],  # WRONG
+         "outputs": {"r": {"type": "string"}}},
+        {"id": "end", "type": "end", "title": "E", "outputs": []},
+    ])
+    errors = validate_spec(spec)
+    assert any("dotted path" in e for e in errors)
+
+
+def test_validate_correct_env_selector_ok():
+    """value_selector ['env','KEY'] is correct."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "key", "value_selector": ["env", "KEY"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "out", "value_selector": ["code", "r"]}]},
+        ],
+        [
+            {"source": "start", "target": "code"},
+            {"source": "code", "target": "end"},
+        ],
+    )
+    assert validate_spec(spec) == []
+
+
 def test_validate_edge_coverage_transitive_ok():
     """Transitive path is enough: A->B->C, C references A's output."""
     spec = _spec(
@@ -640,6 +1312,54 @@ def test_validate_edge_coverage_transitive_ok():
             {"source": "start", "target": "mid"},
             {"source": "mid", "target": "end"},
             # end references start, path: start -> mid -> end (transitive)
+        ],
+    )
+    assert validate_spec(spec) == []
+
+
+def test_validate_single_element_selector_rejected():
+    """value_selector ['sys.env.XXX'] is wrong - should be ['env','XXX']."""
+    spec = _spec([
+        {"id": "start", "type": "start", "title": "S",
+         "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+        {"id": "code", "type": "code", "title": "C",
+         "variables": [{"variable": "key", "value_selector": ["env.KEY"]}],  # WRONG
+         "outputs": {"r": {"type": "string"}}},
+        {"id": "end", "type": "end", "title": "E", "outputs": []},
+    ])
+    errors = validate_spec(spec)
+    assert any("single-element" in e and "'env.KEY'" in e for e in errors)
+
+
+def test_validate_dotted_first_element_rejected():
+    """selector ['sys.env.XXX', 'val'] has dotted first element."""
+    spec = _spec([
+        {"id": "start", "type": "start", "title": "S",
+         "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+        {"id": "code", "type": "code", "title": "C",
+         "variables": [{"variable": "key", "value_selector": ["sys.env.XXX", "val"]}],  # WRONG
+         "outputs": {"r": {"type": "string"}}},
+        {"id": "end", "type": "end", "title": "E", "outputs": []},
+    ])
+    errors = validate_spec(spec)
+    assert any("dotted path" in e for e in errors)
+
+
+def test_validate_correct_env_selector_ok():
+    """value_selector ['env','KEY'] is correct."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "key", "value_selector": ["env", "KEY"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "out", "value_selector": ["code", "r"]}]},
+        ],
+        [
+            {"source": "start", "target": "code"},
+            {"source": "code", "target": "end"},
         ],
     )
     assert validate_spec(spec) == []
@@ -730,6 +1450,54 @@ def test_validate_ifelse_edge_correct_src_handle_ok():
     assert validate_spec(spec) == []
 
 
+def test_validate_single_element_selector_rejected():
+    """value_selector ['sys.env.XXX'] is wrong - should be ['env','XXX']."""
+    spec = _spec([
+        {"id": "start", "type": "start", "title": "S",
+         "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+        {"id": "code", "type": "code", "title": "C",
+         "variables": [{"variable": "key", "value_selector": ["env.KEY"]}],  # WRONG
+         "outputs": {"r": {"type": "string"}}},
+        {"id": "end", "type": "end", "title": "E", "outputs": []},
+    ])
+    errors = validate_spec(spec)
+    assert any("single-element" in e and "'env.KEY'" in e for e in errors)
+
+
+def test_validate_dotted_first_element_rejected():
+    """selector ['sys.env.XXX', 'val'] has dotted first element."""
+    spec = _spec([
+        {"id": "start", "type": "start", "title": "S",
+         "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+        {"id": "code", "type": "code", "title": "C",
+         "variables": [{"variable": "key", "value_selector": ["sys.env.XXX", "val"]}],  # WRONG
+         "outputs": {"r": {"type": "string"}}},
+        {"id": "end", "type": "end", "title": "E", "outputs": []},
+    ])
+    errors = validate_spec(spec)
+    assert any("dotted path" in e for e in errors)
+
+
+def test_validate_correct_env_selector_ok():
+    """value_selector ['env','KEY'] is correct."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "key", "value_selector": ["env", "KEY"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "out", "value_selector": ["code", "r"]}]},
+        ],
+        [
+            {"source": "start", "target": "code"},
+            {"source": "code", "target": "end"},
+        ],
+    )
+    assert validate_spec(spec) == []
+
+
 def test_validate_missing_edge_between_siblings():
     """Node references another node's output but no edge connects them."""
     spec = _spec(
@@ -778,6 +1546,54 @@ def test_validate_edge_coverage_ok():
     assert validate_spec(spec) == []
 
 
+def test_validate_single_element_selector_rejected():
+    """value_selector ['sys.env.XXX'] is wrong - should be ['env','XXX']."""
+    spec = _spec([
+        {"id": "start", "type": "start", "title": "S",
+         "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+        {"id": "code", "type": "code", "title": "C",
+         "variables": [{"variable": "key", "value_selector": ["env.KEY"]}],  # WRONG
+         "outputs": {"r": {"type": "string"}}},
+        {"id": "end", "type": "end", "title": "E", "outputs": []},
+    ])
+    errors = validate_spec(spec)
+    assert any("single-element" in e and "'env.KEY'" in e for e in errors)
+
+
+def test_validate_dotted_first_element_rejected():
+    """selector ['sys.env.XXX', 'val'] has dotted first element."""
+    spec = _spec([
+        {"id": "start", "type": "start", "title": "S",
+         "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+        {"id": "code", "type": "code", "title": "C",
+         "variables": [{"variable": "key", "value_selector": ["sys.env.XXX", "val"]}],  # WRONG
+         "outputs": {"r": {"type": "string"}}},
+        {"id": "end", "type": "end", "title": "E", "outputs": []},
+    ])
+    errors = validate_spec(spec)
+    assert any("dotted path" in e for e in errors)
+
+
+def test_validate_correct_env_selector_ok():
+    """value_selector ['env','KEY'] is correct."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "key", "value_selector": ["env", "KEY"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "out", "value_selector": ["code", "r"]}]},
+        ],
+        [
+            {"source": "start", "target": "code"},
+            {"source": "code", "target": "end"},
+        ],
+    )
+    assert validate_spec(spec) == []
+
+
 def test_validate_edge_coverage_transitive_ok():
     """Transitive path is enough: A->B->C, C references A's output."""
     spec = _spec(
@@ -794,6 +1610,54 @@ def test_validate_edge_coverage_transitive_ok():
             {"source": "start", "target": "mid"},
             {"source": "mid", "target": "end"},
             # end references start, path: start -> mid -> end (transitive)
+        ],
+    )
+    assert validate_spec(spec) == []
+
+
+def test_validate_single_element_selector_rejected():
+    """value_selector ['sys.env.XXX'] is wrong - should be ['env','XXX']."""
+    spec = _spec([
+        {"id": "start", "type": "start", "title": "S",
+         "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+        {"id": "code", "type": "code", "title": "C",
+         "variables": [{"variable": "key", "value_selector": ["env.KEY"]}],  # WRONG
+         "outputs": {"r": {"type": "string"}}},
+        {"id": "end", "type": "end", "title": "E", "outputs": []},
+    ])
+    errors = validate_spec(spec)
+    assert any("single-element" in e and "'env.KEY'" in e for e in errors)
+
+
+def test_validate_dotted_first_element_rejected():
+    """selector ['sys.env.XXX', 'val'] has dotted first element."""
+    spec = _spec([
+        {"id": "start", "type": "start", "title": "S",
+         "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+        {"id": "code", "type": "code", "title": "C",
+         "variables": [{"variable": "key", "value_selector": ["sys.env.XXX", "val"]}],  # WRONG
+         "outputs": {"r": {"type": "string"}}},
+        {"id": "end", "type": "end", "title": "E", "outputs": []},
+    ])
+    errors = validate_spec(spec)
+    assert any("dotted path" in e for e in errors)
+
+
+def test_validate_correct_env_selector_ok():
+    """value_selector ['env','KEY'] is correct."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "code", "type": "code", "title": "C",
+             "variables": [{"variable": "key", "value_selector": ["env", "KEY"]}],
+             "outputs": {"r": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "out", "value_selector": ["code", "r"]}]},
+        ],
+        [
+            {"source": "start", "target": "code"},
+            {"source": "code", "target": "end"},
         ],
     )
     assert validate_spec(spec) == []

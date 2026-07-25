@@ -67,6 +67,7 @@ def validate_spec(spec: dict[str, Any]) -> list[str]:
             continue
         for path, selector in _extract_references(node):
             errors.extend(_check_reference(node, path, selector, nodes_by_id))
+    errors.extend(_check_selector_format(spec))
 
     errors.extend(_check_variables(spec))
     errors.extend(_check_node_ids(spec))
@@ -104,6 +105,74 @@ def _check_variables(spec: dict[str, Any]) -> list[str]:
                 f"Use 'string' (not 'text'). Valid: {sorted(_VALID_VAR_VALUE_TYPES)}"
             )
     return errors
+
+
+# All selector field patterns (value_selector + variable_selector + iterators etc.)
+_ALL_SELECTOR_PATTERNS = {
+    "code": ["variables.*.value_selector"],
+    "end": ["outputs.*.value_selector"],
+    "template-transform": ["variables.*.value_selector"],
+    "llm": [],
+    "if-else": ["cases.*.conditions.*.variable_selector"],
+    "iteration": ["iterator_selector", "output_selector"],
+    "loop": ["break_conditions.*.variable_selector"],
+    "variable-aggregator": ["variables"],
+    "knowledge-retrieval": ["query_variable_selector"],
+    "question-classifier": ["query_variable_selector"],
+    "parameter-extractor": ["query"],
+    "document-extractor": ["variable_selector"],
+}
+
+
+def _check_selector_format(spec: dict[str, Any]) -> list[str]:
+    """Check that all value_selector/variable_selector are 2+ element string
+    arrays (['node_id', 'var']), not single-element dotted strings like
+    ['sys.env.XXX'] or ['env.XXX']."""
+    errors: list[str] = []
+    for n in spec.get("nodes", []) or []:
+        if not isinstance(n, dict):
+            continue
+        nid = n.get("id", "?")
+        ntype = n.get("type", "")
+        for pattern in _ALL_SELECTOR_PATTERNS.get(ntype, []):
+            for path, value in _walk_pattern(n, pattern):
+                if not isinstance(value, list):
+                    continue
+                # variable-aggregator.variables is array of arrays
+                if ntype == "variable-aggregator":
+                    for item in value:
+                        _check_one_selector(item, nid, path, errors)
+                else:
+                    _check_one_selector(value, nid, path, errors)
+    return errors
+
+
+def _check_one_selector(selector: Any, nid: str, path: str, errors: list[str]) -> None:
+    """Validate a single selector: must be 2+ element array of strings."""
+    if not isinstance(selector, list):
+        return
+    if len(selector) < 2:
+        # Likely ['sys.env.XXX'] or ['env.XXX'] - agent used dotted string
+        errors.append(
+            f"node {nid!r}: {path}: selector must be a 2+ element array like "
+            f"['node_id','var'], got {selector!r} (single-element). "
+            f"For env vars use ['env','VAR_NAME'], not ['env.VAR_NAME']."
+        )
+        return
+    for elem in selector:
+        if not isinstance(elem, str):
+            errors.append(
+                f"node {nid!r}: {path}: selector elements must be strings, "
+                f"got {elem!r} in {selector!r}"
+            )
+            return
+    # Check for dotted first element (e.g. ['sys.env.XXX', 'something'])
+    if "." in selector[0] and selector[0] not in ("env", "sys"):
+        errors.append(
+            f"node {nid!r}: {path}: selector first element should be a node id "
+            f"or 'env'/'sys', not a dotted path {selector[0]!r}. "
+            f"Use ['env','VAR_NAME'] for env vars."
+        )
 
 
 def _check_node_ids(spec: dict[str, Any]) -> list[str]:
