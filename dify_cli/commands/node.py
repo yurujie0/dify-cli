@@ -158,7 +158,7 @@ def check(
     import json as _json
     from ..core.node_builder import _post_process, fields_dict_to_list, parse_field_value
     from ..core.spec_format import HOISTED_FIELDS, NODES_WITHOUT_INTERNAL_CONFIG, impl_file_for, needs_implementation
-    from ..core.spec_validator import _walk_all_strings, _extract_template_refs, _exposed_vars, _in_scope
+    from ..core.spec_validator import _walk_all_strings, _walk_pattern, _extract_template_refs, _exposed_vars, _in_scope
 
     spec_data = _json.loads(spec.read_text(encoding="utf-8"))
     # Build node index and assign parentId to children (children are top-level).
@@ -217,7 +217,7 @@ def check(
     # 2. Template variable references ({{#node.var#}}) in internal config.
     # {{#env.VAR#}} and {{#sys.VAR#}} reference environment/system variables,
     # not nodes - skip them.
-    _BUILTIN_SCOPES = {"env", "sys"}
+    _BUILTIN_SCOPES = {"env", "sys", "conversation"}
     for path, value in _walk_all_strings(internal):
         for ref_id, ref_var in _extract_template_refs(value):
             if ref_id in _BUILTIN_SCOPES:
@@ -228,6 +228,35 @@ def check(
                 continue
             if not _in_scope(ref_node, target_spec, path):
                 errors.append(f"{path}: template ref {ref_id!r} is out of scope (inside container)")
+                continue
+            if ref_node.get("type") not in {"tool", "agent"}:
+                exposed = _exposed_vars(ref_node, target_spec)
+                if ref_var not in exposed:
+                    errors.append(f"{path}: {ref_id!r} does not expose {ref_var!r}. Exposes: {sorted(exposed) or '(none)'}")
+
+    # 3. Selector arrays (value_selector/variable_selector) in internal config.
+    # e.g. llm context.variable_selector, code variables[].value_selector
+    _SELECTOR_PATHS = [
+        "context.variable_selector",
+        "variables.*.value_selector",
+    ]
+    for pattern in _SELECTOR_PATHS:
+        for path, value in _walk_pattern(internal, pattern):
+            if not isinstance(value, list) or len(value) < 2:
+                if isinstance(value, list):
+                    errors.append(
+                        f"{path}: selector must be ['node_id','var'], got {value!r}"
+                    )
+                continue
+            ref_id, ref_var = value[0], value[1]
+            if ref_id in _BUILTIN_SCOPES:
+                continue
+            ref_node = nodes_by_id.get(ref_id)
+            if ref_node is None:
+                errors.append(f"{path}: selector references node {ref_id!r} which does not exist in spec")
+                continue
+            if not _in_scope(ref_node, target_spec, path):
+                errors.append(f"{path}: selector references {ref_id!r} which is out of scope")
                 continue
             if ref_node.get("type") not in {"tool", "agent"}:
                 exposed = _exposed_vars(ref_node, target_spec)
