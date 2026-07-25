@@ -375,17 +375,36 @@ def _check_edge_coverage(spec: dict[str, Any], nodes_by_id: dict[str, dict]) -> 
 
     errors: list[str] = []
     for nid, deps in node_deps.items():
+        parent = edge_node_to_container.get(nid)
         for dep_id in deps:
             # Skip if dep is the node's own container (container variables
             # like loop.counter / iter.item are from the variable pool, not edges)
-            if edge_node_to_container.get(nid) == dep_id:
+            if parent == dep_id:
                 continue
-            # Check if there's a path dep_id -> ... -> nid via edges
-            if not _has_path(adjacency, dep_id, nid):
-                errors.append(
-                    f"node {nid!r}: references variable from {dep_id!r} but no edge connects "
-                    f"{dep_id!r} -> {nid!r} (directly or transitively). Add an edge."
-                )
+            # Determine the path target:
+            # - If dep is a sibling (same container): check path dep -> nid directly
+            # - If dep is external (outside container): check path dep -> parent
+            #   (children can reference any variable visible to their parent)
+            if parent and edge_node_to_container.get(dep_id) == parent:
+                path_target = nid  # sibling - direct path
+            elif parent:
+                path_target = parent  # external - path to parent container
+            else:
+                path_target = nid  # top-level node - direct path
+            if path_target == dep_id:
+                continue
+            if not _has_path(adjacency, dep_id, path_target):
+                if path_target != nid:
+                    errors.append(
+                        f"node {nid!r}: references variable from {dep_id!r} but no edge connects "
+                        f"{dep_id!r} -> {path_target!r} (the parent container, directly or transitively). "
+                        f"Add an edge to the parent."
+                    )
+                else:
+                    errors.append(
+                        f"node {nid!r}: references variable from {dep_id!r} but no edge connects "
+                        f"{dep_id!r} -> {nid!r} (directly or transitively). Add an edge."
+                    )
     return errors
 
 
