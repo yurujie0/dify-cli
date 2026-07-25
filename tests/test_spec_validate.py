@@ -3948,8 +3948,8 @@ def test_validate_trigger_in_advanced_chat_rejected():
     assert any("trigger-webhook" in e and "workflow" in e for e in errors)
 
 
-def test_validate_ifelse_case_id_false_rejected():
-    """case_id 'false' is the implicit else branch, not an explicit case."""
+def test_validate_ifelse_case_id_false_ignored():
+    """case_id 'false' is silently ignored by spec validate (apply drops it)."""
     spec = _spec([
         {"id": "start", "type": "start", "title": "S",
          "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
@@ -3961,8 +3961,9 @@ def test_validate_ifelse_case_id_false_rejected():
          ]},
         {"id": "end", "type": "end", "title": "E", "outputs": []},
     ])
+    # spec validate should NOT error on case_id "false" (apply silently drops it)
     errors = validate_spec(spec)
-    assert any("case_id 'false'" in e and "implicit else" in e for e in errors)
+    assert not any("case_id 'false'" in e for e in errors)
 
 
 def test_validate_ifelse_edge_wrong_src_handle():

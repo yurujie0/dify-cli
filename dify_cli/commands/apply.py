@@ -114,6 +114,10 @@ def _resolve_node_fields(n: dict, node_type: str, spec_path) -> dict:
     nid = n.get("id", "?")
     hoisted = {f: n[f] for f in HOISTED_FIELDS.get(node_type, []) if f in n}
 
+    # if-else: drop cases with case_id "false" (implicit else branch, not a real case).
+    if node_type == "if-else" and "cases" in hoisted:
+        hoisted["cases"] = [c for c in hoisted["cases"] if c.get("case_id") != "false"]
+
     if node_type in NODES_WITHOUT_INTERNAL_CONFIG:
         internal = {}
     else:

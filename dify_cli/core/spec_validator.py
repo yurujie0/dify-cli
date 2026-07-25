@@ -260,13 +260,6 @@ def _check_hoisted_structure(spec: dict[str, Any]) -> list[str]:
                         f"node {nid!r} ({ntype}).{check['field']}[{i}]: "
                         f"missing required field {req!r}"
                     )
-            # if-else: case_id "false" is the implicit else branch, not a case
-            if ntype == "if-else" and item.get("case_id") == "false":
-                errors.append(
-                    f"node {nid!r} (if-else).cases[{i}]: case_id 'false' is the implicit else "
-                    f"branch - remove this case. The else branch is handled by edges with "
-                    f"src_handle='false', not by an explicit case."
-                )
             # Check sub-items (e.g. conditions inside cases)
             subfield = check.get("subfield")
             if subfield:
