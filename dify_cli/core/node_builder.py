@@ -122,7 +122,28 @@ def _post_process(node_type: str, data: dict[str, Any]) -> None:
     """
     _normalize_fields(node_type, data)
     _patch_end_output_value_types(data)
+    _normalize_conditions(data)
     _walk_and_patch(data)
+
+
+def _normalize_conditions(data: dict[str, Any]) -> None:
+    """Fix common condition mistakes that the frontend checklist rejects:
+    - comparison_operator 'is' with value '' means 'is empty' -> use 'empty'
+    """
+    def _walk(obj: Any) -> None:
+        if isinstance(obj, dict):
+            if "comparison_operator" in obj and obj.get("comparison_operator") == "is":
+                val = obj.get("value")
+                if val == "" or val is None:
+                    obj["comparison_operator"] = "empty"
+                    if obj.get("value") is None:
+                        obj["value"] = ""
+            for v in obj.values():
+                _walk(v)
+        elif isinstance(obj, list):
+            for item in obj:
+                _walk(item)
+    _walk(data)
 
 
 def _patch_end_output_value_types(data: dict[str, Any]) -> None:
