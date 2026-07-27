@@ -32,7 +32,7 @@ HOISTED_FIELDS: dict[str, list[str]] = {
 
 # Spec-layer metadata fields that apply/spec_validator ignore. They carry
 # design-stage info (IO contract schema, implementation hints for sub-agents).
-IGNORED_SPEC_FIELDS = {"_output_schema", "implementation_hint"}
+IGNORED_SPEC_FIELDS = {"_output_schema", "implementation_hint", "template_inputs"}
 
 # Node types whose required fields are ALL hoisted (or have frontend defaults).
 # These don't need an impl file - the spec layer is complete at design stage.

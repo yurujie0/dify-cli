@@ -363,6 +363,12 @@ def _check_edge_coverage(spec: dict[str, Any], nodes_by_id: dict[str, dict]) -> 
                     target_id = selector[0]
                     if target_id and target_id not in ("env", "sys", "conversation") and target_id != nid:
                         deps.add(target_id)
+        # template_inputs also need edge coverage
+        for item in node.get("template_inputs", []) or []:
+            if isinstance(item, list) and len(item) >= 2:
+                target_id = item[0]
+                if target_id and target_id not in ("env", "sys", "conversation") and target_id != nid:
+                    deps.add(target_id)
         if deps:
             node_deps[nid] = deps
 
@@ -495,7 +501,8 @@ _CONTAINER_CHILD_FIELDS = {"output_selector"}
 
 def _extract_references(node: dict[str, Any]) -> Iterator[tuple[str, list]]:
     """Yield (field_path, selector) pairs from a spec node's hoisted top-level
-    fields. Does NOT read `fields` (@file) - selectors live at the spec layer."""
+    fields + template_inputs. Does NOT read `fields` (@file) - selectors live
+    at the spec layer."""
     ntype = node.get("type", "")
 
     for pattern in _SELECTOR_FIELDS.get(ntype, []):
@@ -509,6 +516,11 @@ def _extract_references(node: dict[str, Any]) -> Iterator[tuple[str, list]]:
                 for item in value:
                     if isinstance(item, list) and len(item) >= 2:
                         yield (path, item)
+
+    # template_inputs: declared template variable references (design stage)
+    for item in node.get("template_inputs", []) or []:
+        if isinstance(item, list) and len(item) >= 2:
+            yield ("template_inputs", item)
 
 
 def _walk_pattern(data: Any, pattern: str) -> Iterator[tuple[str, Any]]:

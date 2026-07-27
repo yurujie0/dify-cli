@@ -215,24 +215,31 @@ def check(
         errors.append(f"schema: {e}")
 
     # 2. Template variable references ({{#node.var#}}) in internal config.
-    # {{#env.VAR#}} and {{#sys.VAR#}} reference environment/system variables,
-    # not nodes - skip them.
+    # Check against spec's template_inputs declaration.
     _BUILTIN_SCOPES = {"env", "sys", "conversation"}
+    declared_template_inputs = set()
+    for item in target_spec.get("template_inputs", []) or []:
+        if isinstance(item, list) and len(item) >= 2:
+            declared_template_inputs.add((item[0], item[1]))
     for path, value in _walk_all_strings(internal):
         for ref_id, ref_var in _extract_template_refs(value):
+            # Built-in scopes: check existence (env/conversation declared, sys valid)
             if ref_id in _BUILTIN_SCOPES:
+                if ref_id == "env":
+                    env_names = {ev.get("name") for ev in spec_data.get("environment_variables", []) or [] if isinstance(ev, dict)}
+                    if ref_var not in env_names:
+                        errors.append(f"{path}: env variable {ref_var!r} not declared in spec.environment_variables")
+                elif ref_id == "conversation":
+                    conv_names = {cv.get("name") for cv in spec_data.get("conversation_variables", []) or [] if isinstance(cv, dict)}
+                    if ref_var not in conv_names:
+                        errors.append(f"{path}: conversation variable {ref_var!r} not declared in spec.conversation_variables")
                 continue
-            ref_node = nodes_by_id.get(ref_id)
-            if ref_node is None:
-                errors.append(f"{path}: template ref {ref_id!r} does not exist in spec")
-                continue
-            if not _in_scope(ref_node, target_spec, path):
-                errors.append(f"{path}: template ref {ref_id!r} is out of scope (inside container)")
-                continue
-            if ref_node.get("type") not in {"tool", "agent"}:
-                exposed = _exposed_vars(ref_node, target_spec)
-                if ref_var not in exposed:
-                    errors.append(f"{path}: {ref_id!r} does not expose {ref_var!r}. Exposes: {sorted(exposed) or '(none)'}")
+            # Node reference: check declared in template_inputs
+            if (ref_id, ref_var) not in declared_template_inputs:
+                errors.append(
+                    f"{path}: template ref {{{{#{ref_id}.{ref_var}#}}}} not declared in spec "
+                    f"template_inputs. Add [\"{ref_id}\",\"{ref_var}\"] to this node's template_inputs."
+                )
 
     # 3. Selector arrays (value_selector/variable_selector) in internal config.
     # e.g. llm context.variable_selector, code variables[].value_selector
