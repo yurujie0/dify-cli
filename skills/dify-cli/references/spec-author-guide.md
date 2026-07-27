@@ -252,6 +252,68 @@ dify-cli apply --spec spec.json -f app.yaml --force
 dify-cli validate app.yaml
 ```
 
+### HTTP request with template_inputs
+
+A node that uses `{{#node.var#}}` in its impl file (http-request body, llm prompt, answer text) declares those references via `template_inputs` at design stage. This lets `spec validate` check them before impl files exist, and `node check` verify the impl matches the declaration.
+
+Design spec:
+```json
+{
+  "mode": "workflow", "name": "Fetch Data",
+  "environment_variables": [
+    {"name": "API_URL", "value": "http://api.example.com", "value_type": "string"},
+    {"name": "API_TOKEN", "value": "sk-xxx", "value_type": "string"}
+  ],
+  "nodes": [
+    {"id": "start", "type": "start", "title": "Start",
+     "variables": [
+       {"variable": "product", "label": "产品编码", "type": "text-input", "required": true}
+     ]},
+    {"id": "fetch", "type": "http-request", "title": "Fetch Data",
+     "template_inputs": [
+       ["start", "product"],
+       ["env", "API_URL"],
+       ["env", "API_TOKEN"]
+     ],
+     "implementation_hint": "POST 调用 API，body 引用 {{#start.product#}}，url 引用 {{#env.API_URL#}}，header 引用 {{#env.API_TOKEN#}}"},
+    {"id": "end", "type": "end", "title": "End",
+     "outputs": [{"variable": "result", "value_selector": ["fetch", "body"]}]}
+  ],
+  "edges": [
+    {"source": "start", "target": "fetch"},
+    {"source": "fetch", "target": "end"}
+  ]
+}
+```
+
+```bash
+dify-cli spec validate --spec spec.json   # checks template_inputs refs + edges
+
+# implementation stage: sub-agent generates impl/fetch.json
+# impl/fetch.json uses {{#start.product#}}, {{#env.API_URL#}}, {{#env.API_TOKEN#}}
+# node check verifies every {{#...#}} in impl is declared in template_inputs
+dify-cli node check fetch --spec spec.json
+
+dify-cli apply --spec spec.json -f app.yaml --force
+dify-cli validate app.yaml
+```
+
+Example impl/fetch.json:
+```json
+{
+  "method": "post",
+  "url": "{{#env.API_URL#}}",
+  "headers": "Content-Type: application/json\nAuthorization: Bearer {{#env.API_TOKEN#}}",
+  "body": {"type": "raw-text", "data": [{"key": "", "type": "text", "value": "{\"product\":\"{{#start.product#}}\"}"}]}
+}
+```
+
+If impl/fetch.json contained `{{#start.nonexistent#}}` but spec didn't declare it in template_inputs, node check would report:
+```
+FAIL body.data[0].value: template ref {{#start.nonexistent#}} not declared
+in spec template_inputs. Add ["start","nonexistent"] to this node's template_inputs.
+```
+
 ### Changing the workflow
 
-Edit `spec.json` (structure/IO) and/or impl files (internal config), re-run `spec validate` + `apply`. Never hand-edit the generated DSL.
+Edit `spec.json` (structure/IO/template_inputs) and/or impl files (internal config), re-run `spec validate` + `apply`. Never hand-edit the generated DSL.
