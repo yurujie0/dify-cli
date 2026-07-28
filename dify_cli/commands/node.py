@@ -192,27 +192,19 @@ def check(
             raise DifyCliError(f"impl file must contain a JSON object, got {type(internal).__name__}")
 
     # Merge hoisted (from spec) + internal. Hoisted wins over impl
-    # (spec is the source of truth). If impl accidentally includes a
-    # hoisted field, just drop it - no error.
+    # (spec is the source of truth). Drop hoisted fields from internal.
     hoisted = {f: target_spec[f] for f in HOISTED_FIELDS.get(ntype, []) if f in target_spec}
     for f in list(internal):
         if f in hoisted:
             del internal[f]
-    merged = {**internal, **hoisted}
 
     ver = dsl_version or spec_data.get("dsl_version") or "0.5.0"
 
     errors: list[str] = []
-    # 1. Schema validation on merged data.
-    try:
-        schema = get_node_schema(ver, ntype)
-        data = dict(merged)
-        data.setdefault("type", ntype)
-        data.setdefault("title", target_spec.get("title", ""))
-        _post_process(ntype, data)
-        validate_node_data(ntype, data, schema)
-    except DifyCliError as e:
-        errors.append(f"schema: {e}")
+    # 1. Schema validation (reuses shared logic with spec validate).
+    from ..core.node_builder import build_and_validate_node_data
+    errs = build_and_validate_node_data(ntype, target_spec, internal, ver)
+    errors.extend(f"schema: {e}" for e in errs)
 
     # 2. Template variable references ({{#node.var#}}) in internal config.
     # Check against spec's template_inputs declaration.

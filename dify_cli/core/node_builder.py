@@ -286,6 +286,56 @@ def validate_node_data(node_type: str, data: dict[str, Any], schema: dict) -> No
         raise NodeValidationError(node_type, msg, path)
 
 
+def build_and_validate_node_data(
+    node_type: str,
+    spec_node: dict[str, Any],
+    internal: dict[str, Any] | None,
+    dsl_version: str,
+) -> list[str]:
+    """Shared validation logic used by both spec validate (for complete nodes)
+    and node check. Builds merged data (frontend defaults + internal + hoisted),
+    runs _post_process + schema validation. Returns a list of error strings
+    (empty = valid).
+
+    - spec validate: internal=None (no impl file yet, uses frontend defaults only)
+    - node check: internal=impl file content
+    """
+    from .spec_format import HOISTED_FIELDS, NODES_WITHOUT_INTERNAL_CONFIG
+    import copy
+
+    # Start from frontend defaults
+    frontend_defaults = get_node_defaults(dsl_version, node_type)
+    data: dict[str, Any] = copy.deepcopy(frontend_defaults) if frontend_defaults else {}
+
+    # Merge internal config (impl file) if provided
+    if internal:
+        for f in list(internal):
+            # Drop hoisted fields from internal (spec wins)
+            if f in HOISTED_FIELDS.get(node_type, []):
+                continue
+        # Deep merge internal over defaults
+        merged = _deep_merge(data, internal)
+        data = merged
+
+    # Merge hoisted fields from spec node (spec wins)
+    hoisted = {f: spec_node[f] for f in HOISTED_FIELDS.get(node_type, []) if f in spec_node}
+    data.update(hoisted)
+
+    data["type"] = node_type
+    data.setdefault("title", spec_node.get("title", ""))
+    data.setdefault("desc", "")
+    data.setdefault("selected", False)
+
+    _post_process(node_type, data)
+
+    try:
+        schema = get_node_schema(dsl_version, node_type)
+        validate_node_data(node_type, data, schema)
+    except NodeValidationError as e:
+        return [str(e)]
+    return []
+
+
 def fields_dict_to_list(fields_dict: dict[str, Any]) -> list[str]:
     """Convert a fields dict (as used in --fields-file / apply spec) to the
     `["k=v", ...]` list form consumed by apply_fields / build_node.

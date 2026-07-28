@@ -701,9 +701,9 @@ def _exposed_vars(target: dict, ref: dict) -> set[str]:
 def _check_schema_for_complete_nodes(spec: dict[str, Any], nodes_by_id: dict[str, dict]) -> list[str]:
     """For nodes that don't need impl files (start/end/if-else/iteration/loop/
     document-extractor), run full backend schema validation at design stage.
-    These nodes are complete in the spec - their data should pass schema before
-    apply, not wait until impl stage."""
+    Reuses build_and_validate_node_data (shared with node check)."""
     from .spec_format import NODES_WITHOUT_INTERNAL_CONFIG
+    from .node_builder import build_and_validate_node_data
     errors: list[str] = []
     ver = spec.get("dsl_version", "0.5.0")
     for n in spec.get("nodes", []) or []:
@@ -713,24 +713,8 @@ def _check_schema_for_complete_nodes(spec: dict[str, Any], nodes_by_id: dict[str
         if ntype not in NODES_WITHOUT_INTERNAL_CONFIG:
             continue
         nid = n.get("id", "?")
-        # Build data: frontend defaults + hoisted fields (same as apply produces)
-        from .spec_format import HOISTED_FIELDS
-        from .node_builder import get_node_defaults
-        import copy
-        frontend_defaults = get_node_defaults(ver, ntype)
-        data: dict[str, Any] = copy.deepcopy(frontend_defaults) if frontend_defaults else {}
-        for f in HOISTED_FIELDS.get(ntype, []):
-            if f in n:
-                data[f] = n[f]
-        data["type"] = ntype
-        data["title"] = n.get("title", "")
-        data.setdefault("desc", "")
-        data.setdefault("selected", False)
-        try:
-            from .node_builder import _post_process, validate_node_data, get_node_schema
-            schema = get_node_schema(ver, ntype)
-            _post_process(ntype, data)
-            validate_node_data(ntype, data, schema)
-        except Exception as e:
+        # internal=None: no impl file, uses frontend defaults only
+        errs = build_and_validate_node_data(ntype, n, None, ver)
+        for e in errs:
             errors.append(f"node {nid!r} ({ntype}): {e}")
     return errors
