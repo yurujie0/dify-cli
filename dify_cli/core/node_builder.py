@@ -272,7 +272,18 @@ def validate_node_data(node_type: str, data: dict[str, Any], schema: dict) -> No
     if errs:
         e = errs[0]
         path = ".".join(str(p) for p in e.absolute_path) or None
-        raise NodeValidationError(node_type, e.message, path)
+        # For anyOf errors (vague "not valid under any of the given schemas"),
+        # try to find a more specific sub-error.
+        msg = e.message
+        if "not valid under any of the given schemas" in msg:
+            sub_errs = sorted(e.context, key=lambda se: list(se.absolute_path)) if e.context else []
+            if sub_errs:
+                se = sub_errs[0]
+                sub_path = ".".join(str(p) for p in se.absolute_path) or None
+                full_path = f"{path}.{sub_path}" if path and sub_path else (sub_path or path)
+                path = full_path
+                msg = se.message
+        raise NodeValidationError(node_type, msg, path)
 
 
 def fields_dict_to_list(fields_dict: dict[str, Any]) -> list[str]:
