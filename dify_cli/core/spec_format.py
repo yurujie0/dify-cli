@@ -37,7 +37,7 @@ IGNORED_SPEC_FIELDS = {"_output_schema", "implementation_hint", "template_inputs
 # Node types whose required fields are ALL hoisted (or have frontend defaults).
 # These don't need an impl file - the spec layer is complete at design stage.
 # All other node types need an impl file (code, model, prompt_template, etc.).
-NODES_WITHOUT_INTERNAL_CONFIG = {"start", "end", "iteration", "loop", "document-extractor", "if-else"}
+NODES_WITHOUT_INTERNAL_CONFIG = {"start", "end", "iteration", "loop", "document-extractor", "if-else", "variable-aggregator"}
 
 # Node ids must be path-safe: lowercase alphanumerics, underscore, hyphen.
 # Used directly as impl filename (<id>.json), so this avoids path traversal
