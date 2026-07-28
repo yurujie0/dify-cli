@@ -272,18 +272,26 @@ def validate_node_data(node_type: str, data: dict[str, Any], schema: dict) -> No
     if errs:
         e = errs[0]
         path = ".".join(str(p) for p in e.absolute_path) or None
-        # For anyOf errors (vague "not valid under any of the given schemas"),
-        # try to find a more specific sub-error.
-        msg = e.message
-        if "not valid under any of the given schemas" in msg:
-            sub_errs = sorted(e.context, key=lambda se: list(se.absolute_path)) if e.context else []
-            if sub_errs:
-                se = sub_errs[0]
-                sub_path = ".".join(str(p) for p in se.absolute_path) or None
-                full_path = f"{path}.{sub_path}" if path and sub_path else (sub_path or path)
-                path = full_path
-                msg = se.message
+        msg = _best_error_message(e)
         raise NodeValidationError(node_type, msg, path)
+
+
+def _best_error_message(err) -> str:
+    """Extract the most specific error message from a jsonschema error.
+    For compound validators (anyOf/oneOf), drill into sub-errors."""
+    # Compound validators (anyOf/oneOf) have vague top-level messages
+    # but specific sub-errors in .context.
+    if hasattr(err, "validator") and err.validator in ("anyOf", "oneOf") and err.context:
+        sub_errs = sorted(err.context, key=lambda se: list(se.absolute_path))
+        se = sub_errs[0]
+        sub_path = ".".join(str(p) for p in se.absolute_path) or None
+        parent_path = ".".join(str(p) for p in err.absolute_path) or None
+        # Combine parent + sub path for full context
+        if parent_path and sub_path and not sub_path.startswith(parent_path):
+            # Sub-error has a different path - prepend parent for context
+            return f"{sub_path}: {se.message}"
+        return se.message
+    return err.message
 
 
 def build_and_validate_node_data(
