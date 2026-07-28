@@ -98,7 +98,7 @@ Note: `start`/`end`/`iter` don't have `implementation_hint` (they don't need imp
 - **Hoisted IO/dependency fields** (per node type, see table below) - contain variable selectors or IO declarations, visible to `spec validate`
 - `template_inputs` (optional): list of template variable references the node's impl file will use via `{{#node_id.var#}}`. Each item is `["node_id", "var_name"]` or `["env", "VAR"]` or `["sys", "query"]`. spec validate checks these (existence, scope, edge coverage); node check verifies impl `{{#...#}}` refs match declarations; apply ignores this field. Example: `"template_inputs": [["start", "q"], ["env", "API_KEY"]]`
 - `_output_schema` (optional): IO contract schema with field structure (apply ignores; for future test generation)
-- `implementation_hint` (optional): natural-language description of what the node should do. Only for nodes that need impl files (code/llm/http/etc). apply ignores it; the implementation sub-agent reads it.
+- `implementation_hint` (optional): natural-language description of what the node should do, including how `template_inputs` variables are used in the impl file. Only for nodes that need impl files (code/llm/http/etc). apply ignores it; the implementation sub-agent reads it. Example: `"implementation_hint": "POST 调用 API，body 用 {{#start.product#}} 作为产品参数，url 用 {{#env.API_URL#}}"`
 - `children` (iteration/loop only): list of child node **ids** (strings). Child nodes are defined at the same level as other nodes in `spec.nodes`, not nested.
 
 ### Hoisted fields per node type

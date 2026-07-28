@@ -68,6 +68,7 @@ def validate_spec(spec: dict[str, Any]) -> list[str]:
         for path, selector in _extract_references(node):
             errors.extend(_check_reference(node, path, selector, nodes_by_id, spec))
     errors.extend(_check_selector_format(spec))
+    errors.extend(_check_template_inputs_format(spec))
 
     errors.extend(_check_variables(spec))
     errors.extend(_check_node_ids(spec))
@@ -144,6 +145,24 @@ def _check_selector_format(spec: dict[str, Any]) -> list[str]:
                         _check_one_selector(item, nid, path, errors)
                 else:
                     _check_one_selector(value, nid, path, errors)
+    return errors
+
+
+def _check_template_inputs_format(spec: dict[str, Any]) -> list[str]:
+    """Check that template_inputs is a list of 2+ element string arrays."""
+    errors: list[str] = []
+    for n in spec.get("nodes", []) or []:
+        if not isinstance(n, dict):
+            continue
+        nid = n.get("id", "?")
+        ti = n.get("template_inputs")
+        if ti is None:
+            continue
+        if not isinstance(ti, list):
+            errors.append(f"node {nid!r}: template_inputs must be a list, got {type(ti).__name__}")
+            continue
+        for i, item in enumerate(ti):
+            _check_one_selector(item, nid, f"template_inputs[{i}]", errors)
     return errors
 
 
