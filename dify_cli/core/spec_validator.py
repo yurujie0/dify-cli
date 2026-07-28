@@ -163,6 +163,13 @@ def _check_template_inputs_format(spec: dict[str, Any]) -> list[str]:
             errors.append(f"node {nid!r}: template_inputs must be a list, got {type(ti).__name__}")
             continue
         for i, item in enumerate(ti):
+            if not isinstance(item, list):
+                errors.append(
+                    f"node {nid!r}: template_inputs[{i}] must be an array like "
+                    f"[\"node_id\",\"var\"], got {type(item).__name__} {item!r}. "
+                    f"Do NOT use object format."
+                )
+                continue
             _check_one_selector(item, nid, f"template_inputs[{i}]", errors)
     return errors
 
