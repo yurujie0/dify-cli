@@ -28,6 +28,54 @@ def test_validate_clean_workflow():
     assert validate_spec(spec) == []
 
 
+def test_validate_dangling_node_rejected():
+    """Node with outgoing edges but no incoming edge is dangling."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "ifelse", "type": "if-else", "title": "B",
+             "cases": [{"case_id": "has_error", "logical_operator": "and",
+                        "conditions": [{"variable_selector": ["start", "q"], "comparison_operator": "contains", "value": "err"}]}]},
+            {"id": "error_msg", "type": "code", "title": "Error",
+             "variables": [], "outputs": {"msg": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E", "outputs": []},
+        ],
+        [
+            {"source": "start", "target": "ifelse"},
+            # WRONG: ifelse -> end directly, error_msg -> end (error_msg has no incoming)
+            {"source": "ifelse", "target": "end", "src_handle": "has_error"},
+            {"source": "error_msg", "target": "end"},
+        ],
+    )
+    errors = validate_spec(spec)
+    assert any("error_msg" in e and "no incoming edge" in e for e in errors)
+
+
+def test_validate_dangling_node_with_incoming_ok():
+    """Same structure but with correct edges - error_msg has incoming edge."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "ifelse", "type": "if-else", "title": "B",
+             "cases": [{"case_id": "has_error", "logical_operator": "and",
+                        "conditions": [{"variable_selector": ["start", "q"], "comparison_operator": "contains", "value": "err"}]}]},
+            {"id": "error_msg", "type": "code", "title": "Error",
+             "variables": [], "outputs": {"msg": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "msg", "value_selector": ["error_msg", "msg"]}]},
+        ],
+        [
+            {"source": "start", "target": "ifelse"},
+            {"source": "ifelse", "target": "error_msg", "src_handle": "has_error"},  # correct
+            {"source": "error_msg", "target": "end"},
+            {"source": "ifelse", "target": "end", "src_handle": "false"},
+        ],
+    )
+    assert validate_spec(spec) == []
+
+
 def test_validate_undeclared_env_var_rejected():
     """value_selector ['env','MISSING'] where MISSING not in environment_variables."""
     spec = {
@@ -160,6 +208,54 @@ def test_validate_correct_env_selector_ok():
             {"source": "code", "target": "end"},
         ],
     }
+    assert validate_spec(spec) == []
+
+
+def test_validate_dangling_node_rejected():
+    """Node with outgoing edges but no incoming edge is dangling."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "ifelse", "type": "if-else", "title": "B",
+             "cases": [{"case_id": "has_error", "logical_operator": "and",
+                        "conditions": [{"variable_selector": ["start", "q"], "comparison_operator": "contains", "value": "err"}]}]},
+            {"id": "error_msg", "type": "code", "title": "Error",
+             "variables": [], "outputs": {"msg": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E", "outputs": []},
+        ],
+        [
+            {"source": "start", "target": "ifelse"},
+            # WRONG: ifelse -> end directly, error_msg -> end (error_msg has no incoming)
+            {"source": "ifelse", "target": "end", "src_handle": "has_error"},
+            {"source": "error_msg", "target": "end"},
+        ],
+    )
+    errors = validate_spec(spec)
+    assert any("error_msg" in e and "no incoming edge" in e for e in errors)
+
+
+def test_validate_dangling_node_with_incoming_ok():
+    """Same structure but with correct edges - error_msg has incoming edge."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "ifelse", "type": "if-else", "title": "B",
+             "cases": [{"case_id": "has_error", "logical_operator": "and",
+                        "conditions": [{"variable_selector": ["start", "q"], "comparison_operator": "contains", "value": "err"}]}]},
+            {"id": "error_msg", "type": "code", "title": "Error",
+             "variables": [], "outputs": {"msg": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "msg", "value_selector": ["error_msg", "msg"]}]},
+        ],
+        [
+            {"source": "start", "target": "ifelse"},
+            {"source": "ifelse", "target": "error_msg", "src_handle": "has_error"},  # correct
+            {"source": "error_msg", "target": "end"},
+            {"source": "ifelse", "target": "end", "src_handle": "false"},
+        ],
+    )
     assert validate_spec(spec) == []
 
 
@@ -296,6 +392,54 @@ def test_validate_edge_coverage_ok():
     assert validate_spec(spec) == []
 
 
+def test_validate_dangling_node_rejected():
+    """Node with outgoing edges but no incoming edge is dangling."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "ifelse", "type": "if-else", "title": "B",
+             "cases": [{"case_id": "has_error", "logical_operator": "and",
+                        "conditions": [{"variable_selector": ["start", "q"], "comparison_operator": "contains", "value": "err"}]}]},
+            {"id": "error_msg", "type": "code", "title": "Error",
+             "variables": [], "outputs": {"msg": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E", "outputs": []},
+        ],
+        [
+            {"source": "start", "target": "ifelse"},
+            # WRONG: ifelse -> end directly, error_msg -> end (error_msg has no incoming)
+            {"source": "ifelse", "target": "end", "src_handle": "has_error"},
+            {"source": "error_msg", "target": "end"},
+        ],
+    )
+    errors = validate_spec(spec)
+    assert any("error_msg" in e and "no incoming edge" in e for e in errors)
+
+
+def test_validate_dangling_node_with_incoming_ok():
+    """Same structure but with correct edges - error_msg has incoming edge."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "ifelse", "type": "if-else", "title": "B",
+             "cases": [{"case_id": "has_error", "logical_operator": "and",
+                        "conditions": [{"variable_selector": ["start", "q"], "comparison_operator": "contains", "value": "err"}]}]},
+            {"id": "error_msg", "type": "code", "title": "Error",
+             "variables": [], "outputs": {"msg": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "msg", "value_selector": ["error_msg", "msg"]}]},
+        ],
+        [
+            {"source": "start", "target": "ifelse"},
+            {"source": "ifelse", "target": "error_msg", "src_handle": "has_error"},  # correct
+            {"source": "error_msg", "target": "end"},
+            {"source": "ifelse", "target": "end", "src_handle": "false"},
+        ],
+    )
+    assert validate_spec(spec) == []
+
+
 def test_validate_undeclared_env_var_rejected():
     """value_selector ['env','MISSING'] where MISSING not in environment_variables."""
     spec = {
@@ -424,6 +568,54 @@ def test_validate_correct_env_selector_ok():
         [
             {"source": "start", "target": "code"},
             {"source": "code", "target": "end"},
+        ],
+    )
+    assert validate_spec(spec) == []
+
+
+def test_validate_dangling_node_rejected():
+    """Node with outgoing edges but no incoming edge is dangling."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "ifelse", "type": "if-else", "title": "B",
+             "cases": [{"case_id": "has_error", "logical_operator": "and",
+                        "conditions": [{"variable_selector": ["start", "q"], "comparison_operator": "contains", "value": "err"}]}]},
+            {"id": "error_msg", "type": "code", "title": "Error",
+             "variables": [], "outputs": {"msg": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E", "outputs": []},
+        ],
+        [
+            {"source": "start", "target": "ifelse"},
+            # WRONG: ifelse -> end directly, error_msg -> end (error_msg has no incoming)
+            {"source": "ifelse", "target": "end", "src_handle": "has_error"},
+            {"source": "error_msg", "target": "end"},
+        ],
+    )
+    errors = validate_spec(spec)
+    assert any("error_msg" in e and "no incoming edge" in e for e in errors)
+
+
+def test_validate_dangling_node_with_incoming_ok():
+    """Same structure but with correct edges - error_msg has incoming edge."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "ifelse", "type": "if-else", "title": "B",
+             "cases": [{"case_id": "has_error", "logical_operator": "and",
+                        "conditions": [{"variable_selector": ["start", "q"], "comparison_operator": "contains", "value": "err"}]}]},
+            {"id": "error_msg", "type": "code", "title": "Error",
+             "variables": [], "outputs": {"msg": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "msg", "value_selector": ["error_msg", "msg"]}]},
+        ],
+        [
+            {"source": "start", "target": "ifelse"},
+            {"source": "ifelse", "target": "error_msg", "src_handle": "has_error"},  # correct
+            {"source": "error_msg", "target": "end"},
+            {"source": "ifelse", "target": "end", "src_handle": "false"},
         ],
     )
     assert validate_spec(spec) == []
@@ -535,6 +727,54 @@ def test_validate_edge_coverage_transitive_ok():
     assert validate_spec(spec) == []
 
 
+def test_validate_dangling_node_rejected():
+    """Node with outgoing edges but no incoming edge is dangling."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "ifelse", "type": "if-else", "title": "B",
+             "cases": [{"case_id": "has_error", "logical_operator": "and",
+                        "conditions": [{"variable_selector": ["start", "q"], "comparison_operator": "contains", "value": "err"}]}]},
+            {"id": "error_msg", "type": "code", "title": "Error",
+             "variables": [], "outputs": {"msg": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E", "outputs": []},
+        ],
+        [
+            {"source": "start", "target": "ifelse"},
+            # WRONG: ifelse -> end directly, error_msg -> end (error_msg has no incoming)
+            {"source": "ifelse", "target": "end", "src_handle": "has_error"},
+            {"source": "error_msg", "target": "end"},
+        ],
+    )
+    errors = validate_spec(spec)
+    assert any("error_msg" in e and "no incoming edge" in e for e in errors)
+
+
+def test_validate_dangling_node_with_incoming_ok():
+    """Same structure but with correct edges - error_msg has incoming edge."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "ifelse", "type": "if-else", "title": "B",
+             "cases": [{"case_id": "has_error", "logical_operator": "and",
+                        "conditions": [{"variable_selector": ["start", "q"], "comparison_operator": "contains", "value": "err"}]}]},
+            {"id": "error_msg", "type": "code", "title": "Error",
+             "variables": [], "outputs": {"msg": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "msg", "value_selector": ["error_msg", "msg"]}]},
+        ],
+        [
+            {"source": "start", "target": "ifelse"},
+            {"source": "ifelse", "target": "error_msg", "src_handle": "has_error"},  # correct
+            {"source": "error_msg", "target": "end"},
+            {"source": "ifelse", "target": "end", "src_handle": "false"},
+        ],
+    )
+    assert validate_spec(spec) == []
+
+
 def test_validate_undeclared_env_var_rejected():
     """value_selector ['env','MISSING'] where MISSING not in environment_variables."""
     spec = {
@@ -663,6 +903,54 @@ def test_validate_correct_env_selector_ok():
         [
             {"source": "start", "target": "code"},
             {"source": "code", "target": "end"},
+        ],
+    )
+    assert validate_spec(spec) == []
+
+
+def test_validate_dangling_node_rejected():
+    """Node with outgoing edges but no incoming edge is dangling."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "ifelse", "type": "if-else", "title": "B",
+             "cases": [{"case_id": "has_error", "logical_operator": "and",
+                        "conditions": [{"variable_selector": ["start", "q"], "comparison_operator": "contains", "value": "err"}]}]},
+            {"id": "error_msg", "type": "code", "title": "Error",
+             "variables": [], "outputs": {"msg": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E", "outputs": []},
+        ],
+        [
+            {"source": "start", "target": "ifelse"},
+            # WRONG: ifelse -> end directly, error_msg -> end (error_msg has no incoming)
+            {"source": "ifelse", "target": "end", "src_handle": "has_error"},
+            {"source": "error_msg", "target": "end"},
+        ],
+    )
+    errors = validate_spec(spec)
+    assert any("error_msg" in e and "no incoming edge" in e for e in errors)
+
+
+def test_validate_dangling_node_with_incoming_ok():
+    """Same structure but with correct edges - error_msg has incoming edge."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "ifelse", "type": "if-else", "title": "B",
+             "cases": [{"case_id": "has_error", "logical_operator": "and",
+                        "conditions": [{"variable_selector": ["start", "q"], "comparison_operator": "contains", "value": "err"}]}]},
+            {"id": "error_msg", "type": "code", "title": "Error",
+             "variables": [], "outputs": {"msg": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "msg", "value_selector": ["error_msg", "msg"]}]},
+        ],
+        [
+            {"source": "start", "target": "ifelse"},
+            {"source": "ifelse", "target": "error_msg", "src_handle": "has_error"},  # correct
+            {"source": "error_msg", "target": "end"},
+            {"source": "ifelse", "target": "end", "src_handle": "false"},
         ],
     )
     assert validate_spec(spec) == []
@@ -813,6 +1101,54 @@ def test_validate_iteration_output_selector_can_reference_child():
     assert validate_spec(spec) == []
 
 
+def test_validate_dangling_node_rejected():
+    """Node with outgoing edges but no incoming edge is dangling."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "ifelse", "type": "if-else", "title": "B",
+             "cases": [{"case_id": "has_error", "logical_operator": "and",
+                        "conditions": [{"variable_selector": ["start", "q"], "comparison_operator": "contains", "value": "err"}]}]},
+            {"id": "error_msg", "type": "code", "title": "Error",
+             "variables": [], "outputs": {"msg": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E", "outputs": []},
+        ],
+        [
+            {"source": "start", "target": "ifelse"},
+            # WRONG: ifelse -> end directly, error_msg -> end (error_msg has no incoming)
+            {"source": "ifelse", "target": "end", "src_handle": "has_error"},
+            {"source": "error_msg", "target": "end"},
+        ],
+    )
+    errors = validate_spec(spec)
+    assert any("error_msg" in e and "no incoming edge" in e for e in errors)
+
+
+def test_validate_dangling_node_with_incoming_ok():
+    """Same structure but with correct edges - error_msg has incoming edge."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "ifelse", "type": "if-else", "title": "B",
+             "cases": [{"case_id": "has_error", "logical_operator": "and",
+                        "conditions": [{"variable_selector": ["start", "q"], "comparison_operator": "contains", "value": "err"}]}]},
+            {"id": "error_msg", "type": "code", "title": "Error",
+             "variables": [], "outputs": {"msg": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "msg", "value_selector": ["error_msg", "msg"]}]},
+        ],
+        [
+            {"source": "start", "target": "ifelse"},
+            {"source": "ifelse", "target": "error_msg", "src_handle": "has_error"},  # correct
+            {"source": "error_msg", "target": "end"},
+            {"source": "ifelse", "target": "end", "src_handle": "false"},
+        ],
+    )
+    assert validate_spec(spec) == []
+
+
 def test_validate_undeclared_env_var_rejected():
     """value_selector ['env','MISSING'] where MISSING not in environment_variables."""
     spec = {
@@ -941,6 +1277,54 @@ def test_validate_correct_env_selector_ok():
         [
             {"source": "start", "target": "code"},
             {"source": "code", "target": "end"},
+        ],
+    )
+    assert validate_spec(spec) == []
+
+
+def test_validate_dangling_node_rejected():
+    """Node with outgoing edges but no incoming edge is dangling."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "ifelse", "type": "if-else", "title": "B",
+             "cases": [{"case_id": "has_error", "logical_operator": "and",
+                        "conditions": [{"variable_selector": ["start", "q"], "comparison_operator": "contains", "value": "err"}]}]},
+            {"id": "error_msg", "type": "code", "title": "Error",
+             "variables": [], "outputs": {"msg": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E", "outputs": []},
+        ],
+        [
+            {"source": "start", "target": "ifelse"},
+            # WRONG: ifelse -> end directly, error_msg -> end (error_msg has no incoming)
+            {"source": "ifelse", "target": "end", "src_handle": "has_error"},
+            {"source": "error_msg", "target": "end"},
+        ],
+    )
+    errors = validate_spec(spec)
+    assert any("error_msg" in e and "no incoming edge" in e for e in errors)
+
+
+def test_validate_dangling_node_with_incoming_ok():
+    """Same structure but with correct edges - error_msg has incoming edge."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "ifelse", "type": "if-else", "title": "B",
+             "cases": [{"case_id": "has_error", "logical_operator": "and",
+                        "conditions": [{"variable_selector": ["start", "q"], "comparison_operator": "contains", "value": "err"}]}]},
+            {"id": "error_msg", "type": "code", "title": "Error",
+             "variables": [], "outputs": {"msg": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "msg", "value_selector": ["error_msg", "msg"]}]},
+        ],
+        [
+            {"source": "start", "target": "ifelse"},
+            {"source": "ifelse", "target": "error_msg", "src_handle": "has_error"},  # correct
+            {"source": "error_msg", "target": "end"},
+            {"source": "ifelse", "target": "end", "src_handle": "false"},
         ],
     )
     assert validate_spec(spec) == []
@@ -1079,6 +1463,54 @@ def test_validate_edge_coverage_ok():
     assert validate_spec(spec) == []
 
 
+def test_validate_dangling_node_rejected():
+    """Node with outgoing edges but no incoming edge is dangling."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "ifelse", "type": "if-else", "title": "B",
+             "cases": [{"case_id": "has_error", "logical_operator": "and",
+                        "conditions": [{"variable_selector": ["start", "q"], "comparison_operator": "contains", "value": "err"}]}]},
+            {"id": "error_msg", "type": "code", "title": "Error",
+             "variables": [], "outputs": {"msg": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E", "outputs": []},
+        ],
+        [
+            {"source": "start", "target": "ifelse"},
+            # WRONG: ifelse -> end directly, error_msg -> end (error_msg has no incoming)
+            {"source": "ifelse", "target": "end", "src_handle": "has_error"},
+            {"source": "error_msg", "target": "end"},
+        ],
+    )
+    errors = validate_spec(spec)
+    assert any("error_msg" in e and "no incoming edge" in e for e in errors)
+
+
+def test_validate_dangling_node_with_incoming_ok():
+    """Same structure but with correct edges - error_msg has incoming edge."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "ifelse", "type": "if-else", "title": "B",
+             "cases": [{"case_id": "has_error", "logical_operator": "and",
+                        "conditions": [{"variable_selector": ["start", "q"], "comparison_operator": "contains", "value": "err"}]}]},
+            {"id": "error_msg", "type": "code", "title": "Error",
+             "variables": [], "outputs": {"msg": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "msg", "value_selector": ["error_msg", "msg"]}]},
+        ],
+        [
+            {"source": "start", "target": "ifelse"},
+            {"source": "ifelse", "target": "error_msg", "src_handle": "has_error"},  # correct
+            {"source": "error_msg", "target": "end"},
+            {"source": "ifelse", "target": "end", "src_handle": "false"},
+        ],
+    )
+    assert validate_spec(spec) == []
+
+
 def test_validate_undeclared_env_var_rejected():
     """value_selector ['env','MISSING'] where MISSING not in environment_variables."""
     spec = {
@@ -1207,6 +1639,54 @@ def test_validate_correct_env_selector_ok():
         [
             {"source": "start", "target": "code"},
             {"source": "code", "target": "end"},
+        ],
+    )
+    assert validate_spec(spec) == []
+
+
+def test_validate_dangling_node_rejected():
+    """Node with outgoing edges but no incoming edge is dangling."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "ifelse", "type": "if-else", "title": "B",
+             "cases": [{"case_id": "has_error", "logical_operator": "and",
+                        "conditions": [{"variable_selector": ["start", "q"], "comparison_operator": "contains", "value": "err"}]}]},
+            {"id": "error_msg", "type": "code", "title": "Error",
+             "variables": [], "outputs": {"msg": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E", "outputs": []},
+        ],
+        [
+            {"source": "start", "target": "ifelse"},
+            # WRONG: ifelse -> end directly, error_msg -> end (error_msg has no incoming)
+            {"source": "ifelse", "target": "end", "src_handle": "has_error"},
+            {"source": "error_msg", "target": "end"},
+        ],
+    )
+    errors = validate_spec(spec)
+    assert any("error_msg" in e and "no incoming edge" in e for e in errors)
+
+
+def test_validate_dangling_node_with_incoming_ok():
+    """Same structure but with correct edges - error_msg has incoming edge."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "ifelse", "type": "if-else", "title": "B",
+             "cases": [{"case_id": "has_error", "logical_operator": "and",
+                        "conditions": [{"variable_selector": ["start", "q"], "comparison_operator": "contains", "value": "err"}]}]},
+            {"id": "error_msg", "type": "code", "title": "Error",
+             "variables": [], "outputs": {"msg": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "msg", "value_selector": ["error_msg", "msg"]}]},
+        ],
+        [
+            {"source": "start", "target": "ifelse"},
+            {"source": "ifelse", "target": "error_msg", "src_handle": "has_error"},  # correct
+            {"source": "error_msg", "target": "end"},
+            {"source": "ifelse", "target": "end", "src_handle": "false"},
         ],
     )
     assert validate_spec(spec) == []
@@ -1318,6 +1798,54 @@ def test_validate_edge_coverage_transitive_ok():
     assert validate_spec(spec) == []
 
 
+def test_validate_dangling_node_rejected():
+    """Node with outgoing edges but no incoming edge is dangling."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "ifelse", "type": "if-else", "title": "B",
+             "cases": [{"case_id": "has_error", "logical_operator": "and",
+                        "conditions": [{"variable_selector": ["start", "q"], "comparison_operator": "contains", "value": "err"}]}]},
+            {"id": "error_msg", "type": "code", "title": "Error",
+             "variables": [], "outputs": {"msg": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E", "outputs": []},
+        ],
+        [
+            {"source": "start", "target": "ifelse"},
+            # WRONG: ifelse -> end directly, error_msg -> end (error_msg has no incoming)
+            {"source": "ifelse", "target": "end", "src_handle": "has_error"},
+            {"source": "error_msg", "target": "end"},
+        ],
+    )
+    errors = validate_spec(spec)
+    assert any("error_msg" in e and "no incoming edge" in e for e in errors)
+
+
+def test_validate_dangling_node_with_incoming_ok():
+    """Same structure but with correct edges - error_msg has incoming edge."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "ifelse", "type": "if-else", "title": "B",
+             "cases": [{"case_id": "has_error", "logical_operator": "and",
+                        "conditions": [{"variable_selector": ["start", "q"], "comparison_operator": "contains", "value": "err"}]}]},
+            {"id": "error_msg", "type": "code", "title": "Error",
+             "variables": [], "outputs": {"msg": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "msg", "value_selector": ["error_msg", "msg"]}]},
+        ],
+        [
+            {"source": "start", "target": "ifelse"},
+            {"source": "ifelse", "target": "error_msg", "src_handle": "has_error"},  # correct
+            {"source": "error_msg", "target": "end"},
+            {"source": "ifelse", "target": "end", "src_handle": "false"},
+        ],
+    )
+    assert validate_spec(spec) == []
+
+
 def test_validate_undeclared_env_var_rejected():
     """value_selector ['env','MISSING'] where MISSING not in environment_variables."""
     spec = {
@@ -1446,6 +1974,54 @@ def test_validate_correct_env_selector_ok():
         [
             {"source": "start", "target": "code"},
             {"source": "code", "target": "end"},
+        ],
+    )
+    assert validate_spec(spec) == []
+
+
+def test_validate_dangling_node_rejected():
+    """Node with outgoing edges but no incoming edge is dangling."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "ifelse", "type": "if-else", "title": "B",
+             "cases": [{"case_id": "has_error", "logical_operator": "and",
+                        "conditions": [{"variable_selector": ["start", "q"], "comparison_operator": "contains", "value": "err"}]}]},
+            {"id": "error_msg", "type": "code", "title": "Error",
+             "variables": [], "outputs": {"msg": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E", "outputs": []},
+        ],
+        [
+            {"source": "start", "target": "ifelse"},
+            # WRONG: ifelse -> end directly, error_msg -> end (error_msg has no incoming)
+            {"source": "ifelse", "target": "end", "src_handle": "has_error"},
+            {"source": "error_msg", "target": "end"},
+        ],
+    )
+    errors = validate_spec(spec)
+    assert any("error_msg" in e and "no incoming edge" in e for e in errors)
+
+
+def test_validate_dangling_node_with_incoming_ok():
+    """Same structure but with correct edges - error_msg has incoming edge."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "ifelse", "type": "if-else", "title": "B",
+             "cases": [{"case_id": "has_error", "logical_operator": "and",
+                        "conditions": [{"variable_selector": ["start", "q"], "comparison_operator": "contains", "value": "err"}]}]},
+            {"id": "error_msg", "type": "code", "title": "Error",
+             "variables": [], "outputs": {"msg": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "msg", "value_selector": ["error_msg", "msg"]}]},
+        ],
+        [
+            {"source": "start", "target": "ifelse"},
+            {"source": "ifelse", "target": "error_msg", "src_handle": "has_error"},  # correct
+            {"source": "error_msg", "target": "end"},
+            {"source": "ifelse", "target": "end", "src_handle": "false"},
         ],
     )
     assert validate_spec(spec) == []
@@ -1578,6 +2154,54 @@ def test_validate_loop_with_loop_variables_ok():
     assert validate_spec(spec) == []
 
 
+def test_validate_dangling_node_rejected():
+    """Node with outgoing edges but no incoming edge is dangling."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "ifelse", "type": "if-else", "title": "B",
+             "cases": [{"case_id": "has_error", "logical_operator": "and",
+                        "conditions": [{"variable_selector": ["start", "q"], "comparison_operator": "contains", "value": "err"}]}]},
+            {"id": "error_msg", "type": "code", "title": "Error",
+             "variables": [], "outputs": {"msg": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E", "outputs": []},
+        ],
+        [
+            {"source": "start", "target": "ifelse"},
+            # WRONG: ifelse -> end directly, error_msg -> end (error_msg has no incoming)
+            {"source": "ifelse", "target": "end", "src_handle": "has_error"},
+            {"source": "error_msg", "target": "end"},
+        ],
+    )
+    errors = validate_spec(spec)
+    assert any("error_msg" in e and "no incoming edge" in e for e in errors)
+
+
+def test_validate_dangling_node_with_incoming_ok():
+    """Same structure but with correct edges - error_msg has incoming edge."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "ifelse", "type": "if-else", "title": "B",
+             "cases": [{"case_id": "has_error", "logical_operator": "and",
+                        "conditions": [{"variable_selector": ["start", "q"], "comparison_operator": "contains", "value": "err"}]}]},
+            {"id": "error_msg", "type": "code", "title": "Error",
+             "variables": [], "outputs": {"msg": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "msg", "value_selector": ["error_msg", "msg"]}]},
+        ],
+        [
+            {"source": "start", "target": "ifelse"},
+            {"source": "ifelse", "target": "error_msg", "src_handle": "has_error"},  # correct
+            {"source": "error_msg", "target": "end"},
+            {"source": "ifelse", "target": "end", "src_handle": "false"},
+        ],
+    )
+    assert validate_spec(spec) == []
+
+
 def test_validate_undeclared_env_var_rejected():
     """value_selector ['env','MISSING'] where MISSING not in environment_variables."""
     spec = {
@@ -1706,6 +2330,54 @@ def test_validate_correct_env_selector_ok():
         [
             {"source": "start", "target": "code"},
             {"source": "code", "target": "end"},
+        ],
+    )
+    assert validate_spec(spec) == []
+
+
+def test_validate_dangling_node_rejected():
+    """Node with outgoing edges but no incoming edge is dangling."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "ifelse", "type": "if-else", "title": "B",
+             "cases": [{"case_id": "has_error", "logical_operator": "and",
+                        "conditions": [{"variable_selector": ["start", "q"], "comparison_operator": "contains", "value": "err"}]}]},
+            {"id": "error_msg", "type": "code", "title": "Error",
+             "variables": [], "outputs": {"msg": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E", "outputs": []},
+        ],
+        [
+            {"source": "start", "target": "ifelse"},
+            # WRONG: ifelse -> end directly, error_msg -> end (error_msg has no incoming)
+            {"source": "ifelse", "target": "end", "src_handle": "has_error"},
+            {"source": "error_msg", "target": "end"},
+        ],
+    )
+    errors = validate_spec(spec)
+    assert any("error_msg" in e and "no incoming edge" in e for e in errors)
+
+
+def test_validate_dangling_node_with_incoming_ok():
+    """Same structure but with correct edges - error_msg has incoming edge."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "ifelse", "type": "if-else", "title": "B",
+             "cases": [{"case_id": "has_error", "logical_operator": "and",
+                        "conditions": [{"variable_selector": ["start", "q"], "comparison_operator": "contains", "value": "err"}]}]},
+            {"id": "error_msg", "type": "code", "title": "Error",
+             "variables": [], "outputs": {"msg": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "msg", "value_selector": ["error_msg", "msg"]}]},
+        ],
+        [
+            {"source": "start", "target": "ifelse"},
+            {"source": "ifelse", "target": "error_msg", "src_handle": "has_error"},  # correct
+            {"source": "error_msg", "target": "end"},
+            {"source": "ifelse", "target": "end", "src_handle": "false"},
         ],
     )
     assert validate_spec(spec) == []
@@ -1844,6 +2516,54 @@ def test_validate_edge_coverage_ok():
     assert validate_spec(spec) == []
 
 
+def test_validate_dangling_node_rejected():
+    """Node with outgoing edges but no incoming edge is dangling."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "ifelse", "type": "if-else", "title": "B",
+             "cases": [{"case_id": "has_error", "logical_operator": "and",
+                        "conditions": [{"variable_selector": ["start", "q"], "comparison_operator": "contains", "value": "err"}]}]},
+            {"id": "error_msg", "type": "code", "title": "Error",
+             "variables": [], "outputs": {"msg": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E", "outputs": []},
+        ],
+        [
+            {"source": "start", "target": "ifelse"},
+            # WRONG: ifelse -> end directly, error_msg -> end (error_msg has no incoming)
+            {"source": "ifelse", "target": "end", "src_handle": "has_error"},
+            {"source": "error_msg", "target": "end"},
+        ],
+    )
+    errors = validate_spec(spec)
+    assert any("error_msg" in e and "no incoming edge" in e for e in errors)
+
+
+def test_validate_dangling_node_with_incoming_ok():
+    """Same structure but with correct edges - error_msg has incoming edge."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "ifelse", "type": "if-else", "title": "B",
+             "cases": [{"case_id": "has_error", "logical_operator": "and",
+                        "conditions": [{"variable_selector": ["start", "q"], "comparison_operator": "contains", "value": "err"}]}]},
+            {"id": "error_msg", "type": "code", "title": "Error",
+             "variables": [], "outputs": {"msg": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "msg", "value_selector": ["error_msg", "msg"]}]},
+        ],
+        [
+            {"source": "start", "target": "ifelse"},
+            {"source": "ifelse", "target": "error_msg", "src_handle": "has_error"},  # correct
+            {"source": "error_msg", "target": "end"},
+            {"source": "ifelse", "target": "end", "src_handle": "false"},
+        ],
+    )
+    assert validate_spec(spec) == []
+
+
 def test_validate_undeclared_env_var_rejected():
     """value_selector ['env','MISSING'] where MISSING not in environment_variables."""
     spec = {
@@ -1972,6 +2692,54 @@ def test_validate_correct_env_selector_ok():
         [
             {"source": "start", "target": "code"},
             {"source": "code", "target": "end"},
+        ],
+    )
+    assert validate_spec(spec) == []
+
+
+def test_validate_dangling_node_rejected():
+    """Node with outgoing edges but no incoming edge is dangling."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "ifelse", "type": "if-else", "title": "B",
+             "cases": [{"case_id": "has_error", "logical_operator": "and",
+                        "conditions": [{"variable_selector": ["start", "q"], "comparison_operator": "contains", "value": "err"}]}]},
+            {"id": "error_msg", "type": "code", "title": "Error",
+             "variables": [], "outputs": {"msg": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E", "outputs": []},
+        ],
+        [
+            {"source": "start", "target": "ifelse"},
+            # WRONG: ifelse -> end directly, error_msg -> end (error_msg has no incoming)
+            {"source": "ifelse", "target": "end", "src_handle": "has_error"},
+            {"source": "error_msg", "target": "end"},
+        ],
+    )
+    errors = validate_spec(spec)
+    assert any("error_msg" in e and "no incoming edge" in e for e in errors)
+
+
+def test_validate_dangling_node_with_incoming_ok():
+    """Same structure but with correct edges - error_msg has incoming edge."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "ifelse", "type": "if-else", "title": "B",
+             "cases": [{"case_id": "has_error", "logical_operator": "and",
+                        "conditions": [{"variable_selector": ["start", "q"], "comparison_operator": "contains", "value": "err"}]}]},
+            {"id": "error_msg", "type": "code", "title": "Error",
+             "variables": [], "outputs": {"msg": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "msg", "value_selector": ["error_msg", "msg"]}]},
+        ],
+        [
+            {"source": "start", "target": "ifelse"},
+            {"source": "ifelse", "target": "error_msg", "src_handle": "has_error"},  # correct
+            {"source": "error_msg", "target": "end"},
+            {"source": "ifelse", "target": "end", "src_handle": "false"},
         ],
     )
     assert validate_spec(spec) == []
@@ -2083,6 +2851,54 @@ def test_validate_edge_coverage_transitive_ok():
     assert validate_spec(spec) == []
 
 
+def test_validate_dangling_node_rejected():
+    """Node with outgoing edges but no incoming edge is dangling."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "ifelse", "type": "if-else", "title": "B",
+             "cases": [{"case_id": "has_error", "logical_operator": "and",
+                        "conditions": [{"variable_selector": ["start", "q"], "comparison_operator": "contains", "value": "err"}]}]},
+            {"id": "error_msg", "type": "code", "title": "Error",
+             "variables": [], "outputs": {"msg": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E", "outputs": []},
+        ],
+        [
+            {"source": "start", "target": "ifelse"},
+            # WRONG: ifelse -> end directly, error_msg -> end (error_msg has no incoming)
+            {"source": "ifelse", "target": "end", "src_handle": "has_error"},
+            {"source": "error_msg", "target": "end"},
+        ],
+    )
+    errors = validate_spec(spec)
+    assert any("error_msg" in e and "no incoming edge" in e for e in errors)
+
+
+def test_validate_dangling_node_with_incoming_ok():
+    """Same structure but with correct edges - error_msg has incoming edge."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "ifelse", "type": "if-else", "title": "B",
+             "cases": [{"case_id": "has_error", "logical_operator": "and",
+                        "conditions": [{"variable_selector": ["start", "q"], "comparison_operator": "contains", "value": "err"}]}]},
+            {"id": "error_msg", "type": "code", "title": "Error",
+             "variables": [], "outputs": {"msg": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "msg", "value_selector": ["error_msg", "msg"]}]},
+        ],
+        [
+            {"source": "start", "target": "ifelse"},
+            {"source": "ifelse", "target": "error_msg", "src_handle": "has_error"},  # correct
+            {"source": "error_msg", "target": "end"},
+            {"source": "ifelse", "target": "end", "src_handle": "false"},
+        ],
+    )
+    assert validate_spec(spec) == []
+
+
 def test_validate_undeclared_env_var_rejected():
     """value_selector ['env','MISSING'] where MISSING not in environment_variables."""
     spec = {
@@ -2211,6 +3027,54 @@ def test_validate_correct_env_selector_ok():
         [
             {"source": "start", "target": "code"},
             {"source": "code", "target": "end"},
+        ],
+    )
+    assert validate_spec(spec) == []
+
+
+def test_validate_dangling_node_rejected():
+    """Node with outgoing edges but no incoming edge is dangling."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "ifelse", "type": "if-else", "title": "B",
+             "cases": [{"case_id": "has_error", "logical_operator": "and",
+                        "conditions": [{"variable_selector": ["start", "q"], "comparison_operator": "contains", "value": "err"}]}]},
+            {"id": "error_msg", "type": "code", "title": "Error",
+             "variables": [], "outputs": {"msg": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E", "outputs": []},
+        ],
+        [
+            {"source": "start", "target": "ifelse"},
+            # WRONG: ifelse -> end directly, error_msg -> end (error_msg has no incoming)
+            {"source": "ifelse", "target": "end", "src_handle": "has_error"},
+            {"source": "error_msg", "target": "end"},
+        ],
+    )
+    errors = validate_spec(spec)
+    assert any("error_msg" in e and "no incoming edge" in e for e in errors)
+
+
+def test_validate_dangling_node_with_incoming_ok():
+    """Same structure but with correct edges - error_msg has incoming edge."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "ifelse", "type": "if-else", "title": "B",
+             "cases": [{"case_id": "has_error", "logical_operator": "and",
+                        "conditions": [{"variable_selector": ["start", "q"], "comparison_operator": "contains", "value": "err"}]}]},
+            {"id": "error_msg", "type": "code", "title": "Error",
+             "variables": [], "outputs": {"msg": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "msg", "value_selector": ["error_msg", "msg"]}]},
+        ],
+        [
+            {"source": "start", "target": "ifelse"},
+            {"source": "ifelse", "target": "error_msg", "src_handle": "has_error"},  # correct
+            {"source": "error_msg", "target": "end"},
+            {"source": "ifelse", "target": "end", "src_handle": "false"},
         ],
     )
     assert validate_spec(spec) == []
@@ -2416,6 +3280,54 @@ def test_validate_correct_container_edges_ok():
     assert validate_spec(spec) == []
 
 
+def test_validate_dangling_node_rejected():
+    """Node with outgoing edges but no incoming edge is dangling."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "ifelse", "type": "if-else", "title": "B",
+             "cases": [{"case_id": "has_error", "logical_operator": "and",
+                        "conditions": [{"variable_selector": ["start", "q"], "comparison_operator": "contains", "value": "err"}]}]},
+            {"id": "error_msg", "type": "code", "title": "Error",
+             "variables": [], "outputs": {"msg": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E", "outputs": []},
+        ],
+        [
+            {"source": "start", "target": "ifelse"},
+            # WRONG: ifelse -> end directly, error_msg -> end (error_msg has no incoming)
+            {"source": "ifelse", "target": "end", "src_handle": "has_error"},
+            {"source": "error_msg", "target": "end"},
+        ],
+    )
+    errors = validate_spec(spec)
+    assert any("error_msg" in e and "no incoming edge" in e for e in errors)
+
+
+def test_validate_dangling_node_with_incoming_ok():
+    """Same structure but with correct edges - error_msg has incoming edge."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "ifelse", "type": "if-else", "title": "B",
+             "cases": [{"case_id": "has_error", "logical_operator": "and",
+                        "conditions": [{"variable_selector": ["start", "q"], "comparison_operator": "contains", "value": "err"}]}]},
+            {"id": "error_msg", "type": "code", "title": "Error",
+             "variables": [], "outputs": {"msg": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "msg", "value_selector": ["error_msg", "msg"]}]},
+        ],
+        [
+            {"source": "start", "target": "ifelse"},
+            {"source": "ifelse", "target": "error_msg", "src_handle": "has_error"},  # correct
+            {"source": "error_msg", "target": "end"},
+            {"source": "ifelse", "target": "end", "src_handle": "false"},
+        ],
+    )
+    assert validate_spec(spec) == []
+
+
 def test_validate_undeclared_env_var_rejected():
     """value_selector ['env','MISSING'] where MISSING not in environment_variables."""
     spec = {
@@ -2544,6 +3456,54 @@ def test_validate_correct_env_selector_ok():
         [
             {"source": "start", "target": "code"},
             {"source": "code", "target": "end"},
+        ],
+    )
+    assert validate_spec(spec) == []
+
+
+def test_validate_dangling_node_rejected():
+    """Node with outgoing edges but no incoming edge is dangling."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "ifelse", "type": "if-else", "title": "B",
+             "cases": [{"case_id": "has_error", "logical_operator": "and",
+                        "conditions": [{"variable_selector": ["start", "q"], "comparison_operator": "contains", "value": "err"}]}]},
+            {"id": "error_msg", "type": "code", "title": "Error",
+             "variables": [], "outputs": {"msg": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E", "outputs": []},
+        ],
+        [
+            {"source": "start", "target": "ifelse"},
+            # WRONG: ifelse -> end directly, error_msg -> end (error_msg has no incoming)
+            {"source": "ifelse", "target": "end", "src_handle": "has_error"},
+            {"source": "error_msg", "target": "end"},
+        ],
+    )
+    errors = validate_spec(spec)
+    assert any("error_msg" in e and "no incoming edge" in e for e in errors)
+
+
+def test_validate_dangling_node_with_incoming_ok():
+    """Same structure but with correct edges - error_msg has incoming edge."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "ifelse", "type": "if-else", "title": "B",
+             "cases": [{"case_id": "has_error", "logical_operator": "and",
+                        "conditions": [{"variable_selector": ["start", "q"], "comparison_operator": "contains", "value": "err"}]}]},
+            {"id": "error_msg", "type": "code", "title": "Error",
+             "variables": [], "outputs": {"msg": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "msg", "value_selector": ["error_msg", "msg"]}]},
+        ],
+        [
+            {"source": "start", "target": "ifelse"},
+            {"source": "ifelse", "target": "error_msg", "src_handle": "has_error"},  # correct
+            {"source": "error_msg", "target": "end"},
+            {"source": "ifelse", "target": "end", "src_handle": "false"},
         ],
     )
     assert validate_spec(spec) == []
@@ -2682,6 +3642,54 @@ def test_validate_edge_coverage_ok():
     assert validate_spec(spec) == []
 
 
+def test_validate_dangling_node_rejected():
+    """Node with outgoing edges but no incoming edge is dangling."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "ifelse", "type": "if-else", "title": "B",
+             "cases": [{"case_id": "has_error", "logical_operator": "and",
+                        "conditions": [{"variable_selector": ["start", "q"], "comparison_operator": "contains", "value": "err"}]}]},
+            {"id": "error_msg", "type": "code", "title": "Error",
+             "variables": [], "outputs": {"msg": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E", "outputs": []},
+        ],
+        [
+            {"source": "start", "target": "ifelse"},
+            # WRONG: ifelse -> end directly, error_msg -> end (error_msg has no incoming)
+            {"source": "ifelse", "target": "end", "src_handle": "has_error"},
+            {"source": "error_msg", "target": "end"},
+        ],
+    )
+    errors = validate_spec(spec)
+    assert any("error_msg" in e and "no incoming edge" in e for e in errors)
+
+
+def test_validate_dangling_node_with_incoming_ok():
+    """Same structure but with correct edges - error_msg has incoming edge."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "ifelse", "type": "if-else", "title": "B",
+             "cases": [{"case_id": "has_error", "logical_operator": "and",
+                        "conditions": [{"variable_selector": ["start", "q"], "comparison_operator": "contains", "value": "err"}]}]},
+            {"id": "error_msg", "type": "code", "title": "Error",
+             "variables": [], "outputs": {"msg": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "msg", "value_selector": ["error_msg", "msg"]}]},
+        ],
+        [
+            {"source": "start", "target": "ifelse"},
+            {"source": "ifelse", "target": "error_msg", "src_handle": "has_error"},  # correct
+            {"source": "error_msg", "target": "end"},
+            {"source": "ifelse", "target": "end", "src_handle": "false"},
+        ],
+    )
+    assert validate_spec(spec) == []
+
+
 def test_validate_undeclared_env_var_rejected():
     """value_selector ['env','MISSING'] where MISSING not in environment_variables."""
     spec = {
@@ -2810,6 +3818,54 @@ def test_validate_correct_env_selector_ok():
         [
             {"source": "start", "target": "code"},
             {"source": "code", "target": "end"},
+        ],
+    )
+    assert validate_spec(spec) == []
+
+
+def test_validate_dangling_node_rejected():
+    """Node with outgoing edges but no incoming edge is dangling."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "ifelse", "type": "if-else", "title": "B",
+             "cases": [{"case_id": "has_error", "logical_operator": "and",
+                        "conditions": [{"variable_selector": ["start", "q"], "comparison_operator": "contains", "value": "err"}]}]},
+            {"id": "error_msg", "type": "code", "title": "Error",
+             "variables": [], "outputs": {"msg": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E", "outputs": []},
+        ],
+        [
+            {"source": "start", "target": "ifelse"},
+            # WRONG: ifelse -> end directly, error_msg -> end (error_msg has no incoming)
+            {"source": "ifelse", "target": "end", "src_handle": "has_error"},
+            {"source": "error_msg", "target": "end"},
+        ],
+    )
+    errors = validate_spec(spec)
+    assert any("error_msg" in e and "no incoming edge" in e for e in errors)
+
+
+def test_validate_dangling_node_with_incoming_ok():
+    """Same structure but with correct edges - error_msg has incoming edge."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "ifelse", "type": "if-else", "title": "B",
+             "cases": [{"case_id": "has_error", "logical_operator": "and",
+                        "conditions": [{"variable_selector": ["start", "q"], "comparison_operator": "contains", "value": "err"}]}]},
+            {"id": "error_msg", "type": "code", "title": "Error",
+             "variables": [], "outputs": {"msg": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "msg", "value_selector": ["error_msg", "msg"]}]},
+        ],
+        [
+            {"source": "start", "target": "ifelse"},
+            {"source": "ifelse", "target": "error_msg", "src_handle": "has_error"},  # correct
+            {"source": "error_msg", "target": "end"},
+            {"source": "ifelse", "target": "end", "src_handle": "false"},
         ],
     )
     assert validate_spec(spec) == []
@@ -2921,6 +3977,54 @@ def test_validate_edge_coverage_transitive_ok():
     assert validate_spec(spec) == []
 
 
+def test_validate_dangling_node_rejected():
+    """Node with outgoing edges but no incoming edge is dangling."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "ifelse", "type": "if-else", "title": "B",
+             "cases": [{"case_id": "has_error", "logical_operator": "and",
+                        "conditions": [{"variable_selector": ["start", "q"], "comparison_operator": "contains", "value": "err"}]}]},
+            {"id": "error_msg", "type": "code", "title": "Error",
+             "variables": [], "outputs": {"msg": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E", "outputs": []},
+        ],
+        [
+            {"source": "start", "target": "ifelse"},
+            # WRONG: ifelse -> end directly, error_msg -> end (error_msg has no incoming)
+            {"source": "ifelse", "target": "end", "src_handle": "has_error"},
+            {"source": "error_msg", "target": "end"},
+        ],
+    )
+    errors = validate_spec(spec)
+    assert any("error_msg" in e and "no incoming edge" in e for e in errors)
+
+
+def test_validate_dangling_node_with_incoming_ok():
+    """Same structure but with correct edges - error_msg has incoming edge."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "ifelse", "type": "if-else", "title": "B",
+             "cases": [{"case_id": "has_error", "logical_operator": "and",
+                        "conditions": [{"variable_selector": ["start", "q"], "comparison_operator": "contains", "value": "err"}]}]},
+            {"id": "error_msg", "type": "code", "title": "Error",
+             "variables": [], "outputs": {"msg": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "msg", "value_selector": ["error_msg", "msg"]}]},
+        ],
+        [
+            {"source": "start", "target": "ifelse"},
+            {"source": "ifelse", "target": "error_msg", "src_handle": "has_error"},  # correct
+            {"source": "error_msg", "target": "end"},
+            {"source": "ifelse", "target": "end", "src_handle": "false"},
+        ],
+    )
+    assert validate_spec(spec) == []
+
+
 def test_validate_undeclared_env_var_rejected():
     """value_selector ['env','MISSING'] where MISSING not in environment_variables."""
     spec = {
@@ -3049,6 +4153,54 @@ def test_validate_correct_env_selector_ok():
         [
             {"source": "start", "target": "code"},
             {"source": "code", "target": "end"},
+        ],
+    )
+    assert validate_spec(spec) == []
+
+
+def test_validate_dangling_node_rejected():
+    """Node with outgoing edges but no incoming edge is dangling."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "ifelse", "type": "if-else", "title": "B",
+             "cases": [{"case_id": "has_error", "logical_operator": "and",
+                        "conditions": [{"variable_selector": ["start", "q"], "comparison_operator": "contains", "value": "err"}]}]},
+            {"id": "error_msg", "type": "code", "title": "Error",
+             "variables": [], "outputs": {"msg": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E", "outputs": []},
+        ],
+        [
+            {"source": "start", "target": "ifelse"},
+            # WRONG: ifelse -> end directly, error_msg -> end (error_msg has no incoming)
+            {"source": "ifelse", "target": "end", "src_handle": "has_error"},
+            {"source": "error_msg", "target": "end"},
+        ],
+    )
+    errors = validate_spec(spec)
+    assert any("error_msg" in e and "no incoming edge" in e for e in errors)
+
+
+def test_validate_dangling_node_with_incoming_ok():
+    """Same structure but with correct edges - error_msg has incoming edge."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "ifelse", "type": "if-else", "title": "B",
+             "cases": [{"case_id": "has_error", "logical_operator": "and",
+                        "conditions": [{"variable_selector": ["start", "q"], "comparison_operator": "contains", "value": "err"}]}]},
+            {"id": "error_msg", "type": "code", "title": "Error",
+             "variables": [], "outputs": {"msg": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "msg", "value_selector": ["error_msg", "msg"]}]},
+        ],
+        [
+            {"source": "start", "target": "ifelse"},
+            {"source": "ifelse", "target": "error_msg", "src_handle": "has_error"},  # correct
+            {"source": "error_msg", "target": "end"},
+            {"source": "ifelse", "target": "end", "src_handle": "false"},
         ],
     )
     assert validate_spec(spec) == []
@@ -3194,6 +4346,54 @@ def test_validate_answer_in_advanced_chat_ok():
     assert validate_spec(spec) == []
 
 
+def test_validate_dangling_node_rejected():
+    """Node with outgoing edges but no incoming edge is dangling."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "ifelse", "type": "if-else", "title": "B",
+             "cases": [{"case_id": "has_error", "logical_operator": "and",
+                        "conditions": [{"variable_selector": ["start", "q"], "comparison_operator": "contains", "value": "err"}]}]},
+            {"id": "error_msg", "type": "code", "title": "Error",
+             "variables": [], "outputs": {"msg": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E", "outputs": []},
+        ],
+        [
+            {"source": "start", "target": "ifelse"},
+            # WRONG: ifelse -> end directly, error_msg -> end (error_msg has no incoming)
+            {"source": "ifelse", "target": "end", "src_handle": "has_error"},
+            {"source": "error_msg", "target": "end"},
+        ],
+    )
+    errors = validate_spec(spec)
+    assert any("error_msg" in e and "no incoming edge" in e for e in errors)
+
+
+def test_validate_dangling_node_with_incoming_ok():
+    """Same structure but with correct edges - error_msg has incoming edge."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "ifelse", "type": "if-else", "title": "B",
+             "cases": [{"case_id": "has_error", "logical_operator": "and",
+                        "conditions": [{"variable_selector": ["start", "q"], "comparison_operator": "contains", "value": "err"}]}]},
+            {"id": "error_msg", "type": "code", "title": "Error",
+             "variables": [], "outputs": {"msg": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "msg", "value_selector": ["error_msg", "msg"]}]},
+        ],
+        [
+            {"source": "start", "target": "ifelse"},
+            {"source": "ifelse", "target": "error_msg", "src_handle": "has_error"},  # correct
+            {"source": "error_msg", "target": "end"},
+            {"source": "ifelse", "target": "end", "src_handle": "false"},
+        ],
+    )
+    assert validate_spec(spec) == []
+
+
 def test_validate_undeclared_env_var_rejected():
     """value_selector ['env','MISSING'] where MISSING not in environment_variables."""
     spec = {
@@ -3322,6 +4522,54 @@ def test_validate_correct_env_selector_ok():
         [
             {"source": "start", "target": "code"},
             {"source": "code", "target": "end"},
+        ],
+    )
+    assert validate_spec(spec) == []
+
+
+def test_validate_dangling_node_rejected():
+    """Node with outgoing edges but no incoming edge is dangling."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "ifelse", "type": "if-else", "title": "B",
+             "cases": [{"case_id": "has_error", "logical_operator": "and",
+                        "conditions": [{"variable_selector": ["start", "q"], "comparison_operator": "contains", "value": "err"}]}]},
+            {"id": "error_msg", "type": "code", "title": "Error",
+             "variables": [], "outputs": {"msg": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E", "outputs": []},
+        ],
+        [
+            {"source": "start", "target": "ifelse"},
+            # WRONG: ifelse -> end directly, error_msg -> end (error_msg has no incoming)
+            {"source": "ifelse", "target": "end", "src_handle": "has_error"},
+            {"source": "error_msg", "target": "end"},
+        ],
+    )
+    errors = validate_spec(spec)
+    assert any("error_msg" in e and "no incoming edge" in e for e in errors)
+
+
+def test_validate_dangling_node_with_incoming_ok():
+    """Same structure but with correct edges - error_msg has incoming edge."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "ifelse", "type": "if-else", "title": "B",
+             "cases": [{"case_id": "has_error", "logical_operator": "and",
+                        "conditions": [{"variable_selector": ["start", "q"], "comparison_operator": "contains", "value": "err"}]}]},
+            {"id": "error_msg", "type": "code", "title": "Error",
+             "variables": [], "outputs": {"msg": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "msg", "value_selector": ["error_msg", "msg"]}]},
+        ],
+        [
+            {"source": "start", "target": "ifelse"},
+            {"source": "ifelse", "target": "error_msg", "src_handle": "has_error"},  # correct
+            {"source": "error_msg", "target": "end"},
+            {"source": "ifelse", "target": "end", "src_handle": "false"},
         ],
     )
     assert validate_spec(spec) == []
@@ -3460,6 +4708,54 @@ def test_validate_edge_coverage_ok():
     assert validate_spec(spec) == []
 
 
+def test_validate_dangling_node_rejected():
+    """Node with outgoing edges but no incoming edge is dangling."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "ifelse", "type": "if-else", "title": "B",
+             "cases": [{"case_id": "has_error", "logical_operator": "and",
+                        "conditions": [{"variable_selector": ["start", "q"], "comparison_operator": "contains", "value": "err"}]}]},
+            {"id": "error_msg", "type": "code", "title": "Error",
+             "variables": [], "outputs": {"msg": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E", "outputs": []},
+        ],
+        [
+            {"source": "start", "target": "ifelse"},
+            # WRONG: ifelse -> end directly, error_msg -> end (error_msg has no incoming)
+            {"source": "ifelse", "target": "end", "src_handle": "has_error"},
+            {"source": "error_msg", "target": "end"},
+        ],
+    )
+    errors = validate_spec(spec)
+    assert any("error_msg" in e and "no incoming edge" in e for e in errors)
+
+
+def test_validate_dangling_node_with_incoming_ok():
+    """Same structure but with correct edges - error_msg has incoming edge."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "ifelse", "type": "if-else", "title": "B",
+             "cases": [{"case_id": "has_error", "logical_operator": "and",
+                        "conditions": [{"variable_selector": ["start", "q"], "comparison_operator": "contains", "value": "err"}]}]},
+            {"id": "error_msg", "type": "code", "title": "Error",
+             "variables": [], "outputs": {"msg": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "msg", "value_selector": ["error_msg", "msg"]}]},
+        ],
+        [
+            {"source": "start", "target": "ifelse"},
+            {"source": "ifelse", "target": "error_msg", "src_handle": "has_error"},  # correct
+            {"source": "error_msg", "target": "end"},
+            {"source": "ifelse", "target": "end", "src_handle": "false"},
+        ],
+    )
+    assert validate_spec(spec) == []
+
+
 def test_validate_undeclared_env_var_rejected():
     """value_selector ['env','MISSING'] where MISSING not in environment_variables."""
     spec = {
@@ -3588,6 +4884,54 @@ def test_validate_correct_env_selector_ok():
         [
             {"source": "start", "target": "code"},
             {"source": "code", "target": "end"},
+        ],
+    )
+    assert validate_spec(spec) == []
+
+
+def test_validate_dangling_node_rejected():
+    """Node with outgoing edges but no incoming edge is dangling."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "ifelse", "type": "if-else", "title": "B",
+             "cases": [{"case_id": "has_error", "logical_operator": "and",
+                        "conditions": [{"variable_selector": ["start", "q"], "comparison_operator": "contains", "value": "err"}]}]},
+            {"id": "error_msg", "type": "code", "title": "Error",
+             "variables": [], "outputs": {"msg": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E", "outputs": []},
+        ],
+        [
+            {"source": "start", "target": "ifelse"},
+            # WRONG: ifelse -> end directly, error_msg -> end (error_msg has no incoming)
+            {"source": "ifelse", "target": "end", "src_handle": "has_error"},
+            {"source": "error_msg", "target": "end"},
+        ],
+    )
+    errors = validate_spec(spec)
+    assert any("error_msg" in e and "no incoming edge" in e for e in errors)
+
+
+def test_validate_dangling_node_with_incoming_ok():
+    """Same structure but with correct edges - error_msg has incoming edge."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "ifelse", "type": "if-else", "title": "B",
+             "cases": [{"case_id": "has_error", "logical_operator": "and",
+                        "conditions": [{"variable_selector": ["start", "q"], "comparison_operator": "contains", "value": "err"}]}]},
+            {"id": "error_msg", "type": "code", "title": "Error",
+             "variables": [], "outputs": {"msg": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "msg", "value_selector": ["error_msg", "msg"]}]},
+        ],
+        [
+            {"source": "start", "target": "ifelse"},
+            {"source": "ifelse", "target": "error_msg", "src_handle": "has_error"},  # correct
+            {"source": "error_msg", "target": "end"},
+            {"source": "ifelse", "target": "end", "src_handle": "false"},
         ],
     )
     assert validate_spec(spec) == []
@@ -3699,6 +5043,54 @@ def test_validate_edge_coverage_transitive_ok():
     assert validate_spec(spec) == []
 
 
+def test_validate_dangling_node_rejected():
+    """Node with outgoing edges but no incoming edge is dangling."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "ifelse", "type": "if-else", "title": "B",
+             "cases": [{"case_id": "has_error", "logical_operator": "and",
+                        "conditions": [{"variable_selector": ["start", "q"], "comparison_operator": "contains", "value": "err"}]}]},
+            {"id": "error_msg", "type": "code", "title": "Error",
+             "variables": [], "outputs": {"msg": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E", "outputs": []},
+        ],
+        [
+            {"source": "start", "target": "ifelse"},
+            # WRONG: ifelse -> end directly, error_msg -> end (error_msg has no incoming)
+            {"source": "ifelse", "target": "end", "src_handle": "has_error"},
+            {"source": "error_msg", "target": "end"},
+        ],
+    )
+    errors = validate_spec(spec)
+    assert any("error_msg" in e and "no incoming edge" in e for e in errors)
+
+
+def test_validate_dangling_node_with_incoming_ok():
+    """Same structure but with correct edges - error_msg has incoming edge."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "ifelse", "type": "if-else", "title": "B",
+             "cases": [{"case_id": "has_error", "logical_operator": "and",
+                        "conditions": [{"variable_selector": ["start", "q"], "comparison_operator": "contains", "value": "err"}]}]},
+            {"id": "error_msg", "type": "code", "title": "Error",
+             "variables": [], "outputs": {"msg": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "msg", "value_selector": ["error_msg", "msg"]}]},
+        ],
+        [
+            {"source": "start", "target": "ifelse"},
+            {"source": "ifelse", "target": "error_msg", "src_handle": "has_error"},  # correct
+            {"source": "error_msg", "target": "end"},
+            {"source": "ifelse", "target": "end", "src_handle": "false"},
+        ],
+    )
+    assert validate_spec(spec) == []
+
+
 def test_validate_undeclared_env_var_rejected():
     """value_selector ['env','MISSING'] where MISSING not in environment_variables."""
     spec = {
@@ -3827,6 +5219,54 @@ def test_validate_correct_env_selector_ok():
         [
             {"source": "start", "target": "code"},
             {"source": "code", "target": "end"},
+        ],
+    )
+    assert validate_spec(spec) == []
+
+
+def test_validate_dangling_node_rejected():
+    """Node with outgoing edges but no incoming edge is dangling."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "ifelse", "type": "if-else", "title": "B",
+             "cases": [{"case_id": "has_error", "logical_operator": "and",
+                        "conditions": [{"variable_selector": ["start", "q"], "comparison_operator": "contains", "value": "err"}]}]},
+            {"id": "error_msg", "type": "code", "title": "Error",
+             "variables": [], "outputs": {"msg": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E", "outputs": []},
+        ],
+        [
+            {"source": "start", "target": "ifelse"},
+            # WRONG: ifelse -> end directly, error_msg -> end (error_msg has no incoming)
+            {"source": "ifelse", "target": "end", "src_handle": "has_error"},
+            {"source": "error_msg", "target": "end"},
+        ],
+    )
+    errors = validate_spec(spec)
+    assert any("error_msg" in e and "no incoming edge" in e for e in errors)
+
+
+def test_validate_dangling_node_with_incoming_ok():
+    """Same structure but with correct edges - error_msg has incoming edge."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "ifelse", "type": "if-else", "title": "B",
+             "cases": [{"case_id": "has_error", "logical_operator": "and",
+                        "conditions": [{"variable_selector": ["start", "q"], "comparison_operator": "contains", "value": "err"}]}]},
+            {"id": "error_msg", "type": "code", "title": "Error",
+             "variables": [], "outputs": {"msg": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "msg", "value_selector": ["error_msg", "msg"]}]},
+        ],
+        [
+            {"source": "start", "target": "ifelse"},
+            {"source": "ifelse", "target": "error_msg", "src_handle": "has_error"},  # correct
+            {"source": "error_msg", "target": "end"},
+            {"source": "ifelse", "target": "end", "src_handle": "false"},
         ],
     )
     assert validate_spec(spec) == []
@@ -3997,7 +5437,56 @@ def test_validate_ifelse_edge_correct_src_handle_ok():
             {"id": "end", "type": "end", "title": "E", "outputs": []},
         ],
         [
+            {"source": "start", "target": "ifelse"},
             {"source": "ifelse", "target": "end", "src_handle": "has_value"},  # OK
+        ],
+    )
+    assert validate_spec(spec) == []
+
+
+def test_validate_dangling_node_rejected():
+    """Node with outgoing edges but no incoming edge is dangling."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "ifelse", "type": "if-else", "title": "B",
+             "cases": [{"case_id": "has_error", "logical_operator": "and",
+                        "conditions": [{"variable_selector": ["start", "q"], "comparison_operator": "contains", "value": "err"}]}]},
+            {"id": "error_msg", "type": "code", "title": "Error",
+             "variables": [], "outputs": {"msg": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E", "outputs": []},
+        ],
+        [
+            {"source": "start", "target": "ifelse"},
+            # WRONG: ifelse -> end directly, error_msg -> end (error_msg has no incoming)
+            {"source": "ifelse", "target": "end", "src_handle": "has_error"},
+            {"source": "error_msg", "target": "end"},
+        ],
+    )
+    errors = validate_spec(spec)
+    assert any("error_msg" in e and "no incoming edge" in e for e in errors)
+
+
+def test_validate_dangling_node_with_incoming_ok():
+    """Same structure but with correct edges - error_msg has incoming edge."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "ifelse", "type": "if-else", "title": "B",
+             "cases": [{"case_id": "has_error", "logical_operator": "and",
+                        "conditions": [{"variable_selector": ["start", "q"], "comparison_operator": "contains", "value": "err"}]}]},
+            {"id": "error_msg", "type": "code", "title": "Error",
+             "variables": [], "outputs": {"msg": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "msg", "value_selector": ["error_msg", "msg"]}]},
+        ],
+        [
+            {"source": "start", "target": "ifelse"},
+            {"source": "ifelse", "target": "error_msg", "src_handle": "has_error"},  # correct
+            {"source": "error_msg", "target": "end"},
+            {"source": "ifelse", "target": "end", "src_handle": "false"},
         ],
     )
     assert validate_spec(spec) == []
@@ -4131,6 +5620,54 @@ def test_validate_correct_env_selector_ok():
         [
             {"source": "start", "target": "code"},
             {"source": "code", "target": "end"},
+        ],
+    )
+    assert validate_spec(spec) == []
+
+
+def test_validate_dangling_node_rejected():
+    """Node with outgoing edges but no incoming edge is dangling."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "ifelse", "type": "if-else", "title": "B",
+             "cases": [{"case_id": "has_error", "logical_operator": "and",
+                        "conditions": [{"variable_selector": ["start", "q"], "comparison_operator": "contains", "value": "err"}]}]},
+            {"id": "error_msg", "type": "code", "title": "Error",
+             "variables": [], "outputs": {"msg": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E", "outputs": []},
+        ],
+        [
+            {"source": "start", "target": "ifelse"},
+            # WRONG: ifelse -> end directly, error_msg -> end (error_msg has no incoming)
+            {"source": "ifelse", "target": "end", "src_handle": "has_error"},
+            {"source": "error_msg", "target": "end"},
+        ],
+    )
+    errors = validate_spec(spec)
+    assert any("error_msg" in e and "no incoming edge" in e for e in errors)
+
+
+def test_validate_dangling_node_with_incoming_ok():
+    """Same structure but with correct edges - error_msg has incoming edge."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "ifelse", "type": "if-else", "title": "B",
+             "cases": [{"case_id": "has_error", "logical_operator": "and",
+                        "conditions": [{"variable_selector": ["start", "q"], "comparison_operator": "contains", "value": "err"}]}]},
+            {"id": "error_msg", "type": "code", "title": "Error",
+             "variables": [], "outputs": {"msg": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "msg", "value_selector": ["error_msg", "msg"]}]},
+        ],
+        [
+            {"source": "start", "target": "ifelse"},
+            {"source": "ifelse", "target": "error_msg", "src_handle": "has_error"},  # correct
+            {"source": "error_msg", "target": "end"},
+            {"source": "ifelse", "target": "end", "src_handle": "false"},
         ],
     )
     assert validate_spec(spec) == []
@@ -4269,6 +5806,54 @@ def test_validate_edge_coverage_ok():
     assert validate_spec(spec) == []
 
 
+def test_validate_dangling_node_rejected():
+    """Node with outgoing edges but no incoming edge is dangling."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "ifelse", "type": "if-else", "title": "B",
+             "cases": [{"case_id": "has_error", "logical_operator": "and",
+                        "conditions": [{"variable_selector": ["start", "q"], "comparison_operator": "contains", "value": "err"}]}]},
+            {"id": "error_msg", "type": "code", "title": "Error",
+             "variables": [], "outputs": {"msg": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E", "outputs": []},
+        ],
+        [
+            {"source": "start", "target": "ifelse"},
+            # WRONG: ifelse -> end directly, error_msg -> end (error_msg has no incoming)
+            {"source": "ifelse", "target": "end", "src_handle": "has_error"},
+            {"source": "error_msg", "target": "end"},
+        ],
+    )
+    errors = validate_spec(spec)
+    assert any("error_msg" in e and "no incoming edge" in e for e in errors)
+
+
+def test_validate_dangling_node_with_incoming_ok():
+    """Same structure but with correct edges - error_msg has incoming edge."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "ifelse", "type": "if-else", "title": "B",
+             "cases": [{"case_id": "has_error", "logical_operator": "and",
+                        "conditions": [{"variable_selector": ["start", "q"], "comparison_operator": "contains", "value": "err"}]}]},
+            {"id": "error_msg", "type": "code", "title": "Error",
+             "variables": [], "outputs": {"msg": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "msg", "value_selector": ["error_msg", "msg"]}]},
+        ],
+        [
+            {"source": "start", "target": "ifelse"},
+            {"source": "ifelse", "target": "error_msg", "src_handle": "has_error"},  # correct
+            {"source": "error_msg", "target": "end"},
+            {"source": "ifelse", "target": "end", "src_handle": "false"},
+        ],
+    )
+    assert validate_spec(spec) == []
+
+
 def test_validate_undeclared_env_var_rejected():
     """value_selector ['env','MISSING'] where MISSING not in environment_variables."""
     spec = {
@@ -4402,6 +5987,54 @@ def test_validate_correct_env_selector_ok():
     assert validate_spec(spec) == []
 
 
+def test_validate_dangling_node_rejected():
+    """Node with outgoing edges but no incoming edge is dangling."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "ifelse", "type": "if-else", "title": "B",
+             "cases": [{"case_id": "has_error", "logical_operator": "and",
+                        "conditions": [{"variable_selector": ["start", "q"], "comparison_operator": "contains", "value": "err"}]}]},
+            {"id": "error_msg", "type": "code", "title": "Error",
+             "variables": [], "outputs": {"msg": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E", "outputs": []},
+        ],
+        [
+            {"source": "start", "target": "ifelse"},
+            # WRONG: ifelse -> end directly, error_msg -> end (error_msg has no incoming)
+            {"source": "ifelse", "target": "end", "src_handle": "has_error"},
+            {"source": "error_msg", "target": "end"},
+        ],
+    )
+    errors = validate_spec(spec)
+    assert any("error_msg" in e and "no incoming edge" in e for e in errors)
+
+
+def test_validate_dangling_node_with_incoming_ok():
+    """Same structure but with correct edges - error_msg has incoming edge."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "ifelse", "type": "if-else", "title": "B",
+             "cases": [{"case_id": "has_error", "logical_operator": "and",
+                        "conditions": [{"variable_selector": ["start", "q"], "comparison_operator": "contains", "value": "err"}]}]},
+            {"id": "error_msg", "type": "code", "title": "Error",
+             "variables": [], "outputs": {"msg": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "msg", "value_selector": ["error_msg", "msg"]}]},
+        ],
+        [
+            {"source": "start", "target": "ifelse"},
+            {"source": "ifelse", "target": "error_msg", "src_handle": "has_error"},  # correct
+            {"source": "error_msg", "target": "end"},
+            {"source": "ifelse", "target": "end", "src_handle": "false"},
+        ],
+    )
+    assert validate_spec(spec) == []
+
+
 def test_validate_undeclared_env_var_rejected():
     """value_selector ['env','MISSING'] where MISSING not in environment_variables."""
     spec = {
@@ -4503,6 +6136,54 @@ def test_validate_edge_coverage_transitive_ok():
             {"source": "start", "target": "mid"},
             {"source": "mid", "target": "end"},
             # end references start, path: start -> mid -> end (transitive)
+        ],
+    )
+    assert validate_spec(spec) == []
+
+
+def test_validate_dangling_node_rejected():
+    """Node with outgoing edges but no incoming edge is dangling."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "ifelse", "type": "if-else", "title": "B",
+             "cases": [{"case_id": "has_error", "logical_operator": "and",
+                        "conditions": [{"variable_selector": ["start", "q"], "comparison_operator": "contains", "value": "err"}]}]},
+            {"id": "error_msg", "type": "code", "title": "Error",
+             "variables": [], "outputs": {"msg": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E", "outputs": []},
+        ],
+        [
+            {"source": "start", "target": "ifelse"},
+            # WRONG: ifelse -> end directly, error_msg -> end (error_msg has no incoming)
+            {"source": "ifelse", "target": "end", "src_handle": "has_error"},
+            {"source": "error_msg", "target": "end"},
+        ],
+    )
+    errors = validate_spec(spec)
+    assert any("error_msg" in e and "no incoming edge" in e for e in errors)
+
+
+def test_validate_dangling_node_with_incoming_ok():
+    """Same structure but with correct edges - error_msg has incoming edge."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "ifelse", "type": "if-else", "title": "B",
+             "cases": [{"case_id": "has_error", "logical_operator": "and",
+                        "conditions": [{"variable_selector": ["start", "q"], "comparison_operator": "contains", "value": "err"}]}]},
+            {"id": "error_msg", "type": "code", "title": "Error",
+             "variables": [], "outputs": {"msg": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "msg", "value_selector": ["error_msg", "msg"]}]},
+        ],
+        [
+            {"source": "start", "target": "ifelse"},
+            {"source": "ifelse", "target": "error_msg", "src_handle": "has_error"},  # correct
+            {"source": "error_msg", "target": "end"},
+            {"source": "ifelse", "target": "end", "src_handle": "false"},
         ],
     )
     assert validate_spec(spec) == []
@@ -4640,6 +6321,54 @@ def test_validate_correct_env_selector_ok():
             {"source": "code", "target": "end"},
         ],
     }
+    assert validate_spec(spec) == []
+
+
+def test_validate_dangling_node_rejected():
+    """Node with outgoing edges but no incoming edge is dangling."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "ifelse", "type": "if-else", "title": "B",
+             "cases": [{"case_id": "has_error", "logical_operator": "and",
+                        "conditions": [{"variable_selector": ["start", "q"], "comparison_operator": "contains", "value": "err"}]}]},
+            {"id": "error_msg", "type": "code", "title": "Error",
+             "variables": [], "outputs": {"msg": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E", "outputs": []},
+        ],
+        [
+            {"source": "start", "target": "ifelse"},
+            # WRONG: ifelse -> end directly, error_msg -> end (error_msg has no incoming)
+            {"source": "ifelse", "target": "end", "src_handle": "has_error"},
+            {"source": "error_msg", "target": "end"},
+        ],
+    )
+    errors = validate_spec(spec)
+    assert any("error_msg" in e and "no incoming edge" in e for e in errors)
+
+
+def test_validate_dangling_node_with_incoming_ok():
+    """Same structure but with correct edges - error_msg has incoming edge."""
+    spec = _spec(
+        [
+            {"id": "start", "type": "start", "title": "S",
+             "variables": [{"variable": "q", "label": "Q", "type": "text-input"}]},
+            {"id": "ifelse", "type": "if-else", "title": "B",
+             "cases": [{"case_id": "has_error", "logical_operator": "and",
+                        "conditions": [{"variable_selector": ["start", "q"], "comparison_operator": "contains", "value": "err"}]}]},
+            {"id": "error_msg", "type": "code", "title": "Error",
+             "variables": [], "outputs": {"msg": {"type": "string"}}},
+            {"id": "end", "type": "end", "title": "E",
+             "outputs": [{"variable": "msg", "value_selector": ["error_msg", "msg"]}]},
+        ],
+        [
+            {"source": "start", "target": "ifelse"},
+            {"source": "ifelse", "target": "error_msg", "src_handle": "has_error"},  # correct
+            {"source": "error_msg", "target": "end"},
+            {"source": "ifelse", "target": "end", "src_handle": "false"},
+        ],
+    )
     assert validate_spec(spec) == []
 
 

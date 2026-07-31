@@ -76,6 +76,7 @@ def validate_spec(spec: dict[str, Any]) -> list[str]:
     errors.extend(_check_hoisted_structure(spec))
     errors.extend(_check_mode_node_compat(spec))
     errors.extend(_check_edge_coverage(spec, nodes_by_id))
+    errors.extend(_check_dangling_nodes(spec, nodes_by_id))
     errors.extend(_check_schema_for_complete_nodes(spec, nodes_by_id))
     return errors
 
@@ -703,6 +704,57 @@ def _exposed_vars(target: dict, ref: dict) -> set[str]:
     if ttype in ("end", "answer"):
         return set()
     return set()
+
+
+def _check_dangling_nodes(spec: dict[str, Any], nodes_by_id: dict[str, dict]) -> list[str]:
+    """Check that every top-level non-start node has at least one incoming edge.
+    A node with outgoing edges but no incoming edge is "dangling" - likely
+    the agent forgot to connect a predecessor to it.
+
+    Container children (iteration/loop) are exempt: apply auto-creates
+    iterstart/loopstart -> child edges, so they may have no spec-level
+    incoming edge."""
+    # Build child id set (exempt: apply auto-creates start -> child edges).
+    child_ids: set[str] = set()
+    for n in spec.get("nodes", []) or []:
+        if isinstance(n, dict) and n.get("type") in ("iteration", "loop"):
+            child_ids.update(n.get("children", []) or [])
+
+    # Collect all edge targets.
+    targets: set[str] = set()
+    for e in spec.get("edges", []) or []:
+        if isinstance(e, dict):
+            targets.add(e.get("target", ""))
+
+    # Also exempt: iteration/loop nodes themselves may not have an incoming
+    # edge if they're used standalone (e.g. loop with no predecessor in a
+    # minimal test). Only flag nodes that have outgoing edges but no incoming.
+    sources: set[str] = set()
+    for e in spec.get("edges", []) or []:
+        if isinstance(e, dict):
+            sources.add(e.get("source", ""))
+
+    errors: list[str] = []
+    for n in spec.get("nodes", []) or []:
+        if not isinstance(n, dict):
+            continue
+        nid = n.get("id", "")
+        ntype = n.get("type", "")
+        # Skip: start/trigger nodes (entry points), children (auto-connected).
+        if ntype in ("start", "trigger-webhook", "trigger-schedule", "trigger-plugin"):
+            continue
+        if nid in child_ids:
+            continue
+        if nid not in targets:
+            # Only flag if the node has outgoing edges (dangling = has outputs
+            # but no inputs). A node with no edges at all might be intentionally
+            # unused (e.g. in a minimal test).
+            if nid in sources:
+                errors.append(
+                    f"node {nid!r} ({ntype}): has outgoing edges but no incoming edge - "
+                    f"no other node connects to it. Check if a predecessor should connect to it."
+                )
+    return errors
 
 
 def _check_schema_for_complete_nodes(spec: dict[str, Any], nodes_by_id: dict[str, dict]) -> list[str]:
