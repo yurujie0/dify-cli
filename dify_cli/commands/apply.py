@@ -302,11 +302,22 @@ def _build_variables(doc, spec_data: dict) -> None:
     from ..core.node_builder import parse_field_value
     # Common agent mistake: "text" (a start variable type) instead of "string".
     _VAR_TYPE_NORMALIZE = {"text": "string"}
+    _NUMERIC_TYPES = {"number", "integer", "float"}
     for ev in spec_data.get("environment_variables", []) or []:
         vt = _VAR_TYPE_NORMALIZE.get(ev.get("value_type", "string"), ev.get("value_type", "string"))
+        val = ev["value"]
+        if isinstance(val, str):
+            val = parse_field_value(val)
+        # Backend expects numeric value (int/float) for number/integer/float types,
+        # not a string. Convert if needed.
+        if vt in _NUMERIC_TYPES and isinstance(val, str):
+            try:
+                val = int(val) if "." not in val else float(val)
+            except ValueError:
+                pass  # let backend reject if truly invalid
         doc.environment_variables.append({
             "name": ev["name"],
-            "value": parse_field_value(ev["value"]) if isinstance(ev["value"], str) else ev["value"],
+            "value": val,
             "value_type": vt,
         })
     for cv in spec_data.get("conversation_variables", []) or []:
