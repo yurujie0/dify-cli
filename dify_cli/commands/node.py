@@ -190,6 +190,16 @@ def check(
         internal = _json.loads(impl_path.read_text(encoding="utf-8"))
         if not isinstance(internal, dict):
             raise DifyCliError(f"impl file must contain a JSON object, got {type(internal).__name__}")
+        # Detect if the agent wrote a full spec instead of a node's internal config.
+        _SPEC_LEVEL_KEYS = {"nodes", "edges", "mode", "name", "dsl_version", "description",
+                             "environment_variables", "conversation_variables"}
+        spec_keys_found = _SPEC_LEVEL_KEYS & set(internal.keys())
+        if spec_keys_found:
+            raise DifyCliError(
+                f"impl file {impl_path} looks like a full spec (contains {sorted(spec_keys_found)}). "
+                f"It should contain only this node's internal config "
+                f"(e.g. model/prompt_template/code - see `dify-cli schema node {ntype}`)."
+            )
 
     # Merge hoisted (from spec) + internal. Hoisted wins over impl
     # (spec is the source of truth). Drop hoisted fields from internal.
