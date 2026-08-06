@@ -336,12 +336,86 @@ def build_and_validate_node_data(
 
     _post_process(node_type, data)
 
+    # For nodes that need impl files: check that internal config actually
+    # provided meaningful values (not just frontend default placeholders).
+    # This catches the case where the impl file is empty or wrong (e.g. a
+    # full spec was written instead of node config), but schema validation
+    # passes because frontend defaults satisfy required fields.
+    errors: list[str] = []
+    if internal is not None and node_type not in NODES_WITHOUT_INTERNAL_CONFIG:
+        errors.extend(_check_impl_substance(node_type, internal, data))
+
     try:
         schema = get_node_schema(dsl_version, node_type)
         validate_node_data(node_type, data, schema)
     except NodeValidationError as e:
-        return [str(e)]
-    return []
+        errors.append(str(e))
+    return errors
+
+
+# Per node type: fields that the impl file MUST provide with non-placeholder
+# values. Frontend defaults provide empty placeholders that pass schema but
+# are invalid in practice (empty provider/name, empty code, etc.).
+_IMPL_SUBSTANCE_CHECKS: dict[str, list[tuple[str, str]]] = {
+    "llm": [
+        ("model.provider", "model provider is empty (frontend default placeholder)"),
+        ("model.name", "model name is empty (frontend default placeholder)"),
+    ],
+    "code": [
+        ("code", "code is empty (frontend default placeholder)"),
+    ],
+    "http-request": [
+        ("url", "url is empty (frontend default placeholder)"),
+    ],
+    "answer": [
+        ("answer", "answer is empty (frontend default placeholder)"),
+    ],
+    "template-transform": [
+        ("template", "template is empty (frontend default placeholder)"),
+    ],
+    "question-classifier": [
+        ("model.provider", "model provider is empty"),
+        ("model.name", "model name is empty"),
+        ("classes", "classes is empty"),
+    ],
+    "parameter-extractor": [
+        ("model.provider", "model provider is empty"),
+        ("model.name", "model name is empty"),
+    ],
+    "agent": [
+        ("model.provider", "model provider is empty"),
+        ("model.name", "model name is empty"),
+    ],
+}
+
+
+def _check_impl_substance(node_type: str, internal: dict[str, Any], merged_data: dict[str, Any]) -> list[str]:
+    """Check that the impl file provided meaningful (non-placeholder) values
+    for key fields, not just frontend defaults."""
+    checks = _IMPL_SUBSTANCE_CHECKS.get(node_type, [])
+    if not checks:
+        return []
+    errors: list[str] = []
+    for dotted_path, msg in checks:
+        # Check if the field was provided in the impl file (internal).
+        parts = dotted_path.split(".")
+        cur = internal
+        in_impl = True
+        for p in parts:
+            if isinstance(cur, dict) and p in cur:
+                cur = cur[p]
+            else:
+                in_impl = False
+                break
+        if not in_impl:
+            errors.append(f"missing required field {dotted_path!r} in impl file: {msg}")
+            continue
+        # Check if the value is a non-empty placeholder.
+        if isinstance(cur, str) and not cur.strip():
+            errors.append(f"{dotted_path!r} is empty in impl file: {msg}")
+        elif isinstance(cur, list) and len(cur) == 0:
+            errors.append(f"{dotted_path!r} is empty list in impl file: {msg}")
+    return errors
 
 
 def fields_dict_to_list(fields_dict: dict[str, Any]) -> list[str]:
